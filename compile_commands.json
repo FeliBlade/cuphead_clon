@@ -1,0 +1,41 @@
+[
+{
+  "directory": "/home/felibalde/code/clon_cuphead",
+  "arguments": ["/usr/bin/gcc", "-c", "-m64", "-g", "-O0", "-std=c11", "-Iinclude", "-fsanitize=address", "-fsanitize=undefined", "-o", "build/.objs/game/linux/x86_64/debug/src/assets.c.o", "src/assets.c"],
+  "file": "src/assets.c"
+},
+{
+  "directory": "/home/felibalde/code/clon_cuphead",
+  "arguments": ["/usr/bin/gcc", "-c", "-m64", "-g", "-O0", "-std=c11", "-Iinclude", "-fsanitize=address", "-fsanitize=undefined", "-o", "build/.objs/game/linux/x86_64/debug/src/main.c.o", "src/main.c"],
+  "file": "src/main.c"
+},
+{
+  "directory": "/home/felibalde/code/clon_cuphead",
+  "arguments": ["/usr/bin/gcc", "-c", "-m64", "-g", "-O0", "-std=c11", "-Iinclude", "-fsanitize=address", "-fsanitize=undefined", "-o", "build/.objs/game/linux/x86_64/debug/src/renderer.c.o", "src/renderer.c"],
+  "file": "src/renderer.c"
+},
+{
+  "directory": "/home/felibalde/code/clon_cuphead",
+  "arguments": ["/usr/bin/gcc", "-c", "-m64", "-g", "-O0", "-std=c11", "-Iinclude", "-fsanitize=address", "-fsanitize=undefined", "-o", "build/.objs/game/linux/x86_64/debug/src/game.c.o", "src/game.c"],
+  "file": "src/game.c"
+},
+{
+  "directory": "/home/felibalde/code/clon_cuphead",
+  "arguments": ["/usr/bin/gcc", "-c", "-m64", "-g", "-O0", "-std=c11", "-Iinclude", "-fsanitize=address", "-fsanitize=undefined", "-o", "build/.objs/game/linux/x86_64/debug/src/input.c.o", "src/input.c"],
+  "file": "src/input.c"
+},
+{
+  "directory": "/home/felibalde/code/clon_cuphead",
+  "arguments": ["/usr/bin/gcc", "-c", "-m64", "-g", "-O0", "-std=c11", "-Iinclude", "-fsanitize=address", "-fsanitize=undefined", "-o", "build/.objs/game/linux/x86_64/debug/src/update.c.o", "src/update.c"],
+  "file": "src/update.c"
+},
+{
+  "directory": "/home/felibalde/code/clon_cuphead",
+  "arguments": ["/usr/bin/gcc", "-c", "-m64", "-g", "-O0", "-std=c11", "-Iinclude", "-fsanitize=address", "-fsanitize=undefined", "-o", "build/.objs/game/linux/x86_64/debug/src/ui.c.o", "src/ui.c"],
+  "file": "src/ui.c"
+},
+{
+  "directory": "/home/felibalde/code/clon_cuphead",
+  "arguments": ["/usr/bin/gcc", "-c", "-m64", "-g", "-O0", "-std=c11", "-Iinclude", "-fsanitize=address", "-fsanitize=undefined", "-o", "build/.objs/game/linux/x86_64/debug/src/entities.c.o", "src/entities.c"],
+  "file": "src/entities.c"
+}]
