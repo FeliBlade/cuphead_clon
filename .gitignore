@@ -1,0 +1,8 @@
+build/
+.cache/
+.xmake/
+*.out
+*.bin
+*.o
+gamedebug
+gamerelease

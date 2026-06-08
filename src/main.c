@@ -1,4 +1,5 @@
-#include "commons.h"
+//#include "commons.h"
+#include <stdio.h>
 
 /* ================================================================
    MAIN.C — Punto de entrada y game loop
@@ -27,34 +28,35 @@ int main(void) {
     /* ------------------------------------------------------------
        4. INICIALIZAR EL ESTADO DEL JUEGO Y LOS ASSETS
        ------------------------------------------------------------ */
-    GameState game_state;
+    /*GameState game_state;
     InputState input_state;
 
     game_init(&game_state);
-    assets_load();
+    assets_load();*/
 
 
     /* ------------------------------------------------------------
        5. GAME LOOP
        ------------------------------------------------------------ */
-    while (game_state.running) {
+    //while (game_state.running) {
 
 
         /* -- INPUT -------------------------------------------- */
-        input_update(&input_state);
+        //input_update(&input_state);
 
         /* -- UPDATE ------------------------------------------- */
-        update(&game_state, &input_state);
+        //update(&game_state, &input_state);
 
         /* -- RENDER ------------------------------------------- */
-        render_gameview(&game_state);
-        render_ui(&game_state);
-    }
+        //render_gameview(&game_state);
+        //render_ui(&game_state);
+    //}
 
 
     /* ------------------------------------------------------------
        6. CIERRE Y LIBERACIÓN DE RECURSOS
        ------------------------------------------------------------ */
+printf("Hello World");
 
     return 0;
 }
