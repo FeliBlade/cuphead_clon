@@ -1,6 +1,21 @@
 #ifndef COMMONS_H
 #define COMMONS_H
 
+#include <allegro5/allegro5.h>
+#include <allegro5/allegro_video.h>
+#include <allegro5/allegro_image.h>
+#include <allegro5/allegro_audio.h>
+#include <allegro5/allegro_ttf.h>
+#include <allegro5/allegro_font.h>
+#include <allegro5/allegro_primitives.h>
+#include <allegro5/display.h>
+#include <allegro5/system.h>
+#include <allegro5/events.h>
+#include <allegro5/keycodes.h>
+#include <allegro5/monitor.h>
+#include <allegro5/joystick.h>
+
+
 /* ================================================================
    COMMONS.H — Header central del proyecto
    Todos los .c incluyen este archivo y solo este.
@@ -11,7 +26,6 @@
    INCLUDES (librerias)
    ================================================================ */
 
-#include <stdio.h>
 #include <stdbool.h>
 
 /* ================================================================
@@ -19,6 +33,8 @@
    ================================================================ */
 
 #define TARGET_FPS      60
+#define ANCHO_PANTALLA 600
+#define LARGO_PANTALLA 800
 
 /* ================================================================
    ENUMS (manejo de estados)
