@@ -209,6 +209,9 @@ int main()
 
     int i,j; // Contadores generales reutilizables
 
+    FILE *contenidoMapa; // Variables de obtencion de datos de "mapa1.txt"
+    int valorObtenido;
+
     int mapa[ANCHO_MAPA][LARGO_MAPA]={0};
 
     for(i = 0; i < ANCHO_MAPA; i++)
@@ -391,11 +394,6 @@ int main()
                posY = 80;
             }
 
-            direccionArriba = false; // Reinicia la direccion (esta se obtiene cada frame).
-            direccionAbajo = false;
-            direccionIzquierda = false;
-            direccionDerecha = false;
-
             // 2: Dibujar el siguiente frame.
 
             for(i = 0; i < ANCHO_MAPA; i++)
@@ -404,11 +402,11 @@ int main()
                {
                   if(mapa[i][j] != 0)
                   {
-                     al_draw_textf(font, al_map_rgb(255, 255, 255), i*LARGO, j*ANCHO, 0, "%d", mapa[i][j]);
+                     al_draw_textf(font, al_map_rgb(255, 255, 255), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
                   }
                   else
                   {
-                     al_draw_textf(font, al_map_rgb(100, 100, 100), i*LARGO, j*ANCHO, 0, "%d", mapa[i][j]);
+                     al_draw_textf(font, al_map_rgb(100, 100, 100), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
                   }
                }
             }
@@ -428,7 +426,7 @@ int main()
 
             // 3. Dibujar informacion de debug.
 
-            /*al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 0, 0, "X: %.1f Y: %.1f", posX, posY);          
+            al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 0, 0, "X: %.1f Y: %.1f", posX, posY);          
             al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 10, 0, "DEBUG: collide = %d", collide(font, posX, posY, &x1, &y1));
             al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 10, 0, "DEBUG: collideSuelo = %d", collideSuelo(font, posX, posY, &x1, &y1)); 
             al_draw_textf(font, al_map_rgb(255, 255, 255), 250, 0, 0, "Temporizador de gravedad: %d", valorTimerGravedad);
@@ -448,7 +446,12 @@ int main()
             if(direccionDerecha == true)
             {
                al_draw_textf(font, al_map_rgb(255, 255, 255), 20, 80, 0, ">");
-            }*/
+            }
+
+            direccionArriba = false; // Reinicia la direccion (esta se obtiene cada frame).
+            direccionAbajo = false;
+            direccionIzquierda = false;
+            direccionDerecha = false;            
 
             al_flip_display();
 
