@@ -32,9 +32,9 @@
    DEFINE (constantes)
    ================================================================ */
 
-#define TARGET_FPS      60
-#define ANCHO_PANTALLA 600
-#define LARGO_PANTALLA 800
+#define TARGET_FPS     60.0
+#define ANCHO_PANTALLA 720
+#define LARGO_PANTALLA 1280
 
 /* ================================================================
    ENUMS (manejo de estados)
