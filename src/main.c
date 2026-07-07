@@ -24,9 +24,9 @@
 #include <allegro5/allegro_image.h>
 #include <allegro5/allegro_primitives.h>
 #include <allegro5/allegro_image.h>
-#include <allegro5/allegro_primitives.h> // Imprimir matriz de mapa por archivo - Semana: Cargar mapa por matriz en otro archivo, interaccion con otros elementos
+#include <allegro5/allegro_primitives.h> // Sigue: Interaccion con otros elementos (semiplataformas, enemigos, balas, corazones extra), scrolling, pasar personajes y enemigos a una estructura, implementar joystick
 
-#define SPAWNPOINT_X 240
+#define SPAWNPOINT_X 240 // Punto de inicio
 #define SPAWNPOINT_Y 160
 
 #define LARGO 40 // Largo de un bloque
@@ -35,37 +35,45 @@
 #define LARGO_MAPA 32
 #define ANCHO_MAPA 18
 
-#define SPEED_FACTOR 3
+#define SPEED_FACTOR 7
 #define TERMINAL_VELOCITY 40 // 40 px/seg.
+
+typedef struct
+{
+   float posX;
+   float posY;
+   int vida;
+}
+entidad;
 
 void must_init(bool test, const char *description)
 {
-    if(test) return;
+   if(test) return;
 
-    printf("couldn't initialize %s\n", description);
-    exit(1);
+   printf("couldn't initialize %s\n", description);
+   exit(1);
 }
 
-bool collide(ALLEGRO_FONT *font, float posX, float posY, float *sueloX, float *sueloY)
+bool collide(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY)
 {
    int chequeoColision=0;
 
-   if(posX+LARGO>*sueloX)
+   if(entidad.posX+LARGO>*sueloX)
    {
       al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 20, 0, "DEBUG: condicion 1: true");
       chequeoColision++;
    }
-   if(*sueloX+LARGO>posX)
+   if(*sueloX+LARGO>entidad.posX)
    {
       al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 30, 0, "DEBUG: condicion 2: true");
       chequeoColision++;
    }
-   if(posY+ANCHO>*sueloY)
+   if(entidad.posY+ANCHO>*sueloY)
    {
       al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 40, 0, "DEBUG: condicion 3: true");
       chequeoColision++;
    }
-   if(*sueloY+ANCHO>posY)
+   if(*sueloY+ANCHO>entidad.posY)
    {
       al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 50, 0, "DEBUG: condicion 4: true");
       chequeoColision++;
@@ -79,26 +87,26 @@ bool collide(ALLEGRO_FONT *font, float posX, float posY, float *sueloX, float *s
    return false;
 }
 
-bool collideSuelo(ALLEGRO_FONT *font, float posX, float posY, float *sueloX, float *sueloY)
+bool collideSuelo(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY)
 {
    int chequeoColision = 0;
 
-   if(posX+LARGO-2>*sueloX)
+   if(entidad.posX+LARGO-2>*sueloX)
    {
       al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 20, 0, "DEBUG: condicion 1: true");
       chequeoColision++;
    }
-   if(*sueloX+LARGO-2>posX)
+   if(*sueloX+LARGO-2>entidad.posX)
    {
       al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 30, 0, "DEBUG: condicion 2: true");
       chequeoColision++;
    }
-   if(posY + ANCHO >= *sueloY) // **** Se puede reutilizar en la funcion "collide" (posY+ANCHO+1>*sueloY)
+   if(entidad.posY + ANCHO >= *sueloY) // **** Se puede reutilizar en la funcion "collide" (posY+ANCHO+1>*sueloY)
    {
       al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 40, 0, "DEBUG: condicion piso: true");
       chequeoColision++;
    }
-   if(*sueloY+ANCHO>posY)
+   if(*sueloY+ANCHO>entidad.posY)
    {
       al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 50, 0, "DEBUG: condicion 4: true");
       chequeoColision++;
@@ -112,10 +120,10 @@ bool collideSuelo(ALLEGRO_FONT *font, float posX, float posY, float *sueloX, flo
    return false;
 }
 
-float anularMovimientoX(ALLEGRO_FONT* font, bool direccionIzquierda, bool direccionDerecha, float posX, float *sueloX) // Deshace el movimiento en el eje X al chocar
+float anularMovimientoX(ALLEGRO_FONT* font, bool direccionIzquierda, bool direccionDerecha, entidad entidad, float *sueloX) // Deshace el movimiento en el eje X al chocar
 {
    float ajusteX;
-   ajusteX = posX;
+   ajusteX = entidad.posX;
 
    if(direccionIzquierda == true)
    {
@@ -129,16 +137,16 @@ float anularMovimientoX(ALLEGRO_FONT* font, bool direccionIzquierda, bool direcc
    return ajusteX;
 }
 
-float anularMovimientoY(ALLEGRO_FONT* font, bool direccionArriba, bool direccionAbajo, float posY, float *sueloY) // Deshace el movimiento en el eje Y al chocar
+float anularMovimientoY(ALLEGRO_FONT* font, bool direccionArriba, bool direccionAbajo, entidad entidad, float *sueloY) // Deshace el movimiento en el eje Y al chocar
 {
    float ajusteY;
-   ajusteY = posY;
+   ajusteY = entidad.posY;
 
-   if(posY+ANCHO>*sueloY)
+   if(entidad.posY+ANCHO>*sueloY)
    {
       ajusteY = *sueloY + ANCHO;
    }
-   if(*sueloY+ANCHO>posY)
+   if(*sueloY+ANCHO>entidad.posY)
    {
       ajusteY = *sueloY - ANCHO;
    }
@@ -154,7 +162,7 @@ int main()
    ALLEGRO_TIMER* timer = al_create_timer(1.0 / TARGET_FPS);
    must_init(timer, "timer");
 
-   ALLEGRO_TIMER* tempGravedad = al_create_timer(1.0 / (TARGET_FPS / 2.0)); // Temporizador de gravedad.
+   ALLEGRO_TIMER* tempGravedad = al_create_timer(1.0 / TARGET_FPS); // Temporizador de gravedad.
    must_init(tempGravedad, "tempGravedad");
 
    ALLEGRO_EVENT_QUEUE* queue = al_create_event_queue();
@@ -189,9 +197,11 @@ int main()
    bool redraw = true;
    ALLEGRO_EVENT event;
 
-   float posX, posY; // Coordenadas del cuadrado rojo
-   posX = SPAWNPOINT_X; // Punto de inicio
-   posY = SPAWNPOINT_Y;
+   entidad jugador;
+   jugador.posX = SPAWNPOINT_X; // Punto de inicio
+   jugador.posY = SPAWNPOINT_Y;
+   jugador.vida = 9;
+   int iFrames = 0;
 
    bool direccionArriba = false; // Variables que registran la direccion de colision con paredes.
    bool direccionAbajo = false;
@@ -200,11 +210,9 @@ int main()
 
    int valorTimerGravedad = 0; // Obtiene el valor del temporizador de gravedad.
    bool jugadorEnAire = true; // Revisa si esta cayendo el cuadrado personaje.
-
+   bool teclaPresionada = 0;
    int i,j; // Contadores generales reutilizables.
    float puntoX, puntoY; // Reciben los valores de i y j para traspasarlos a variables flotantes que puedan ser traspasadas a las funciones de colision.
-
-   float bloqueColisionX, bloqueColisionY;
 
    FILE *contenidoMapa1; // Variables de obtencion de datos de "mapa1.txt".
    int valorRecibido;
@@ -245,7 +253,6 @@ int main()
    ALLEGRO_KEYBOARD_STATE ks;
 
    al_start_timer(timer);
-   al_start_timer(tempGravedad);
 
    #define KEY_SEEN     1    
    #define KEY_RELEASED 2
@@ -262,8 +269,8 @@ int main()
          case ALLEGRO_EVENT_TIMER:
 
             if(key[ALLEGRO_KEY_UP])
-            {           
-               //posY=posY-SPEED_FACTOR;
+            {
+               jugador.posY = jugador.posY - 20;
                direccionArriba = true;
             }
             if(key[ALLEGRO_KEY_DOWN])
@@ -273,12 +280,12 @@ int main()
             }
             if(key[ALLEGRO_KEY_LEFT])
             {
-               posX=posX-SPEED_FACTOR;
+               jugador.posX = jugador.posX-SPEED_FACTOR;
                direccionIzquierda = true;
             }
             if(key[ALLEGRO_KEY_RIGHT])
             {
-               posX=posX+SPEED_FACTOR;
+               jugador.posX = jugador.posX+SPEED_FACTOR;
                direccionDerecha = true;
             }
 
@@ -313,7 +320,9 @@ int main()
 
          // 1: Realizar los ajustes necesarios en el cuadrado personaje.
 
-         for(i = 0; i < ANCHO_MAPA; i++)
+         if(jugadorEnAire == true)
+         {
+         for(i = 0; i < ANCHO_MAPA; i++) // Define el valor de jugadorEnAire.
          {
             for(j = 0; j < LARGO_MAPA; j++)
             {
@@ -321,26 +330,27 @@ int main()
                puntoY = i*ANCHO;
                if(mapa[i][j] == 1)
                {
-                  if(collideSuelo(font, posX, posY, &puntoX, &puntoY) == true)
+                  if(collideSuelo(font, jugador, &puntoX, &puntoY) == true)
                   {
                      jugadorEnAire = false;
-                     al_stop_timer(tempGravedad);
                      al_set_timer_count(tempGravedad, 0);
+                     al_stop_timer(tempGravedad);
                      break;
                   }
                }
             }
          }
-         if(jugadorEnAire == true)
+         }
+         if(jugadorEnAire == true) // Logica de gravedad.
          {
             al_start_timer(tempGravedad);
-            valorTimerGravedad = al_get_timer_count(tempGravedad); // Logica de gravedad.
             if(valorTimerGravedad > TERMINAL_VELOCITY)
             {
                al_stop_timer(tempGravedad);
                al_set_timer_count(tempGravedad, TERMINAL_VELOCITY);
             }
-            posY = posY + valorTimerGravedad;
+            valorTimerGravedad = al_get_timer_count(tempGravedad);
+            jugador.posY = jugador.posY + valorTimerGravedad;
          }
 
          for(i = 0; i < ANCHO_MAPA; i++) // Revisa las colisiones en cada bloque.
@@ -349,56 +359,89 @@ int main()
             {
                puntoX = j*LARGO;
                puntoY = i*ANCHO;
-               if(mapa[i][j] == 1)
+               if(mapa[i][j] == 1) // Colision personaje-suelo/pared:
                {
-                  if(collide(font, posX, posY, &puntoX, &puntoY) == true)
+                  if(collide(font, jugador, &puntoX, &puntoY) == true)
                   {
-                     al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 10, 0, "DEBUG: collide = %d", collide(font, posX, posY, &puntoX, &puntoY));
-
+                     // Deshace el movimiento del personaje respecto a la colision.
+                     al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 10, 0, "DEBUG: collide = %d", collide(font, jugador, &puntoX, &puntoY));
                      if(jugadorEnAire == true)
                      {
-                        posY = anularMovimientoY(font, direccionArriba, direccionAbajo, posY, &puntoY);
+                        jugador.posY = anularMovimientoY(font, direccionArriba, direccionAbajo, jugador, &puntoY);
                      }
                      else
-                     {                     
-                        posX = anularMovimientoX(font, direccionIzquierda, direccionDerecha, posX, &puntoX);
+                     {
+                        jugador.posX = anularMovimientoX(font, direccionIzquierda, direccionDerecha, jugador, &puntoX);
                      }
+                  }
+               }
+               if(mapa[i][j] == 2) // Colision personaje-pincho:
+               {
+                  if(collide(font, jugador, &puntoX, &puntoY) == true && iFrames == 0)
+                  {
+                     jugador.vida--; // Resta 1 punto de vida.
+                     iFrames = 120; // Otorga 120 frames de invencibilidad.
                   }
                }
             }
          }
 
-         if(posY > ANCHO_PANTALLA + ANCHO) // Si el jugador se "cae" (Se sale de la pantalla por abajo)
+         if(jugador.vida <= 0) // Logica de game over.
          {
-            posX = SPAWNPOINT_X;
-            posY = SPAWNPOINT_Y;
+            al_draw_textf(font, al_map_rgb(255, 13, 69), 600,360, 0, "GAME OVER");
+            if(direccionIzquierda == true)
+            {
+               jugador.posX = jugador.posX + SPEED_FACTOR;
+            }
+            if(direccionDerecha == true)
+            {
+               jugador.posX = jugador.posX - SPEED_FACTOR;
+            }
+
+         }
+
+         if(jugador.posY > ANCHO_PANTALLA + ANCHO) // Si el jugador se "cae" (Se sale de la pantalla por abajo)
+         {
+            jugador.posX = SPAWNPOINT_X;
+            jugador.posY = SPAWNPOINT_Y;
          }
 
          // 2: Dibujar el siguiente frame.
 
          for(i = 0; i < ANCHO_MAPA; i++)
          {
-            for(j = 0; j < LARGO_MAPA; j++)            
+            for(j = 0; j < LARGO_MAPA; j++)
             {
-               if(mapa[i][j] == 1)                  
+               if(mapa[i][j] == 1)
                {
                   al_draw_textf(font, al_map_rgb(255, 255, 255), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]); // Dibuja la posicion en la matriz del cuadrado suelo en pantalla.
                   al_draw_filled_rectangle(j*LARGO, i*ANCHO, j*LARGO + LARGO, i*ANCHO + ANCHO, al_map_rgba_f(0, 0, 0.5, 0.5)); // Dibuja el cuadrado suelo.
                }
+               if(mapa[i][j] == 2)
+               {
+                  al_draw_textf(font, al_map_rgb(255, 255, 255), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
+                  al_draw_filled_rectangle(j*LARGO, i*ANCHO, j*LARGO + LARGO, i*ANCHO + ANCHO, al_map_rgba_f(0.5, 0, 0, 0.5));
+               }
                if(mapa[i][j] == 0)
                {
                   al_draw_textf(font, al_map_rgb(100, 100, 100), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
-               }      
+               }
             }
          }
 
-         al_draw_filled_rectangle(posX, posY, posX + LARGO, posY + ANCHO, al_map_rgb(255, 0, 0)); // Rectangulo de personaje.
+         al_draw_filled_rectangle(jugador.posX, jugador.posY, jugador.posX + LARGO, jugador.posY + ANCHO, al_map_rgb(255, 0, 0)); // Rectangulo de personaje.
          //al_draw_bitmap(mysha, 100, 100, 0);
 
          // Dibujar informacion de debug.
 
-         al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 0, 0, "X: %.1f Y: %.1f", posX, posY);
+         al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 0, 0, "X: %.1f Y: %.1f", jugador.posX, jugador.posY);
+
+         valorTimerGravedad = al_get_timer_count(tempGravedad);
          al_draw_textf(font, al_map_rgb(255, 255, 255), 250, 0, 0, "Temporizador de gravedad: %d", valorTimerGravedad);
+         al_draw_textf(font, al_map_rgb(255, 255, 255), 100, 200, 0, "teclaPresionada: %d", teclaPresionada);
+
+         al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 700, 0, "vida: %d", jugador.vida);
+         al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 710, 0, "iFrames: %d", iFrames);
 
          if(direccionArriba == true) // Imprime las direcciones ingresadas.
          {
@@ -425,9 +468,9 @@ int main()
                puntoY = i*ANCHO;
                if(mapa[i][j] == 1)
                {
-                  if(collideSuelo(font, posX, posY, &puntoX, &puntoY) == true)
+                  if(collideSuelo(font, jugador, &puntoX, &puntoY) == true)
                   {          
-                     al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 10, 0, "DEBUG: collideSuelo = %d", collideSuelo(font, posX, posY, &puntoX, &puntoY));
+                     al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 10, 0, "DEBUG: collideSuelo = %d", collideSuelo(font, jugador, &puntoX, &puntoY));
                      flag = 1;        
                      break;
                   }
@@ -436,7 +479,7 @@ int main()
          }
          if(flag == 0)
          {
-            al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 10, 0, "DEBUG: collideSuelo = %d", collideSuelo(font, posX, posY, &puntoX, &puntoY));
+            al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 10, 0, "DEBUG: collideSuelo = %d", collideSuelo(font, jugador, &puntoX, &puntoY));
          }
          al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 100, 0, "DEBUG: jugadorEnAire = %d", jugadorEnAire);
 
@@ -448,6 +491,11 @@ int main()
          jugadorEnAire = true;
 
          flag = 0;
+
+         if(iFrames > 0)
+         {
+            iFrames--;
+         }
 
          al_flip_display();
 
