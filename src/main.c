@@ -62,148 +62,18 @@ typedef struct
 }
 _direccion;
 
-void must_init(bool test, const char *description)
-{
-   if(test) return;
+void must_init(bool test, const char *description);
 
-   printf("couldn't initialize %s\n", description);
-   exit(1);
-}
+bool collide(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY);
+bool collideParry(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY);
+bool collideSuelo(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY);
+float anularMovimientoX(ALLEGRO_FONT* font, entidad entidad, _direccion direccion, float *sueloX);
+float anularMovimientoY(ALLEGRO_FONT* font, entidad entidad, float *sueloY);
 
-bool collide(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY)
-{
-   int chequeoColision = 0;
-
-   if(entidad.posX+LARGO>*sueloX)
-   {
-      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 20, 0, "DEBUG: condicion 1: true");
-      chequeoColision++;
-   }
-   if(*sueloX+LARGO>entidad.posX)
-   {
-      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 30, 0, "DEBUG: condicion 2: true");
-      chequeoColision++;
-   }
-   if(entidad.posY+ANCHO>*sueloY)
-   {
-      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 40, 0, "DEBUG: condicion 3: true");
-      chequeoColision++;
-   }
-   if(*sueloY+ANCHO>entidad.posY)
-   {
-      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 50, 0, "DEBUG: condicion 4: true");
-      chequeoColision++;
-   }
-
-   if(chequeoColision==4)
-   {
-      return true;
-   }
-
-   return false;
-}
-
-bool collideParry(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY)
-{
-   int chequeoColision = 0;
-
-   if(entidad.posParryX + LARGO * 2 > *sueloX)
-   {
-      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 120, 0, "DEBUG: condicion 1: true");
-      chequeoColision++;
-   }
-   if(*sueloX + LARGO > entidad.posParryX)
-   {
-      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 130, 0, "DEBUG: condicion 2: true");
-      chequeoColision++;
-   }
-   if(entidad.posParryY + ANCHO * 2 > *sueloY)
-   {
-      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 140, 0, "DEBUG: condicion 3: true");
-      chequeoColision++;
-   }
-   if(*sueloY + ANCHO > entidad.posParryY)
-   {
-      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 150, 0, "DEBUG: condicion 4: true");
-      chequeoColision++;
-   }
-
-   if(chequeoColision==4)
-   {
-      return true;
-   }
-
-   return false;
-}
-
-bool collideSuelo(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY)
-{
-   int chequeoColision = 0;
-
-   if(entidad.posX+LARGO-2>*sueloX)
-   {
-      al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 20, 0, "DEBUG: condicion 1: true");
-      chequeoColision++;
-   }
-   if(*sueloX+LARGO-2>entidad.posX)
-   {
-      al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 30, 0, "DEBUG: condicion 2: true");
-      chequeoColision++;
-   }
-   if(entidad.posY + ANCHO >= *sueloY) // **** Se puede reutilizar en la funcion "collide" (posY+ANCHO+1>*sueloY)
-   {
-      al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 40, 0, "DEBUG: condicion piso: true");
-      chequeoColision++;
-   }
-   if(*sueloY+ANCHO>entidad.posY)
-   {
-      al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 50, 0, "DEBUG: condicion 4: true");
-      chequeoColision++;
-   }   
-
-   if(chequeoColision == 4)
-   {
-      return true;
-   }
-
-   return false;
-}
-
-float anularMovimientoX(ALLEGRO_FONT* font, entidad entidad, _direccion direccion, float *sueloX) // Deshace el movimiento en el eje X al chocar
-{
-   float ajusteX;
-   ajusteX = entidad.posX;
-
-   if(direccion.Izquierda == true)
-   {
-      ajusteX = *sueloX + LARGO;
-   }
-   if(direccion.Derecha == true)
-   {
-      ajusteX = *sueloX - LARGO;
-   }
-
-   return ajusteX;
-}
-
-float anularMovimientoY(ALLEGRO_FONT* font, entidad entidad, float *sueloY) // Deshace el movimiento en el eje Y al chocar
-{
-   float ajusteY;
-   ajusteY = entidad.posY;
-
-   if(ajusteY+ANCHO>*sueloY)
-   {
-      ajusteY = *sueloY - ANCHO;
-   }
-   if(ajusteY<*sueloY+ANCHO)
-   {
-      ajusteY = *sueloY - ANCHO;
-   }
-
-   return ajusteY;
-}
+void cargarMapa(int mapa[ANCHO_MAPA][LARGO_MAPA]);
 
 // escribir funcion direccionMovimiento, de tipo struct direccion, que retorna la direccion de movimiento del personaje
+// en main grabaria posY en una variable y al inicio del bucle, la funcion compararia sus valores para determinar el movimiento
 
 int main()
 {
@@ -483,6 +353,7 @@ int main()
                {
                   if(collideParry(font, jugador, &puntoX, &puntoY) == true && parryFrames > 0) // Si se efectua un parry correctamente:
                   {
+                     al_rest(0.1);
                      al_set_timer_count(tempGravedad, -20);
                      teclaSoltada = true;
                      parryFrames = 0;
@@ -641,6 +512,152 @@ int main()
    return 0;
 }
 
+void must_init(bool test, const char *description)
+{
+   if(test) return;
+
+   printf("couldn't initialize %s\n", description);
+   exit(1);
+}
+
+bool collide(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY)
+{
+   int chequeoColision = 0;
+
+   if(entidad.posX+LARGO>*sueloX)
+   {
+      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 20, 0, "DEBUG: condicion 1: true");
+      chequeoColision++;
+   }
+   if(*sueloX+LARGO>entidad.posX)
+   {
+      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 30, 0, "DEBUG: condicion 2: true");
+      chequeoColision++;
+   }
+   if(entidad.posY+ANCHO>*sueloY)
+   {
+      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 40, 0, "DEBUG: condicion 3: true");
+      chequeoColision++;
+   }
+   if(*sueloY+ANCHO>entidad.posY)
+   {
+      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 50, 0, "DEBUG: condicion 4: true");
+      chequeoColision++;
+   }
+
+   if(chequeoColision==4)
+   {
+      return true;
+   }
+
+   return false;
+}
+
+bool collideParry(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY)
+{
+   int chequeoColision = 0;
+
+   if(entidad.posParryX + LARGO * 2 > *sueloX)
+   {
+      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 120, 0, "DEBUG: condicion 1: true");
+      chequeoColision++;
+   }
+   if(*sueloX + LARGO > entidad.posParryX)
+   {
+      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 130, 0, "DEBUG: condicion 2: true");
+      chequeoColision++;
+   }
+   if(entidad.posParryY + ANCHO * 2 > *sueloY)
+   {
+      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 140, 0, "DEBUG: condicion 3: true");
+      chequeoColision++;
+   }
+   if(*sueloY + ANCHO > entidad.posParryY)
+   {
+      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 150, 0, "DEBUG: condicion 4: true");
+      chequeoColision++;
+   }
+
+   if(chequeoColision==4)
+   {
+      return true;
+   }
+
+   return false;
+}
+
+bool collideSuelo(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY)
+{
+   int chequeoColision = 0;
+
+   if(entidad.posX+LARGO-2>*sueloX)
+   {
+      al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 20, 0, "DEBUG: condicion 1: true");
+      chequeoColision++;
+   }
+   if(*sueloX+LARGO-2>entidad.posX)
+   {
+      al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 30, 0, "DEBUG: condicion 2: true");
+      chequeoColision++;
+   }
+   if(entidad.posY + ANCHO >= *sueloY) // **** Se puede reutilizar en la funcion "collide" (posY+ANCHO+1>*sueloY)
+   {
+      al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 40, 0, "DEBUG: condicion piso: true");
+      chequeoColision++;
+   }
+   if(*sueloY+ANCHO>entidad.posY)
+   {
+      al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 50, 0, "DEBUG: condicion 4: true");
+      chequeoColision++;
+   }   
+
+   if(chequeoColision == 4)
+   {
+      return true;
+   }
+
+   return false;
+}
+
+float anularMovimientoX(ALLEGRO_FONT* font, entidad entidad, _direccion direccion, float *sueloX) // Deshace el movimiento en el eje X al chocar
+{
+   float ajusteX;
+   ajusteX = entidad.posX;
+
+   if(direccion.Izquierda == true)
+   {
+      ajusteX = *sueloX + LARGO;
+   }
+   if(direccion.Derecha == true)
+   {
+      ajusteX = *sueloX - LARGO;
+   }
+
+   return ajusteX;
+}
+
+float anularMovimientoY(ALLEGRO_FONT* font, entidad entidad, float *sueloY) // Deshace el movimiento en el eje Y al chocar
+{
+   float ajusteY;
+   ajusteY = entidad.posY;
+
+   if(ajusteY+ANCHO>*sueloY)
+   {
+      ajusteY = *sueloY - ANCHO;
+   }
+   if(ajusteY<*sueloY+ANCHO)
+   {
+      ajusteY = *sueloY - ANCHO;
+   }
+
+   return ajusteY;
+}
+
+void cargarMapa(int mapa[ANCHO_MAPA][LARGO_MAPA])
+{
+   FILE *contenidoMapa;
+   int valorRecibido;
+}
    /* ------------------------------------------------------------
       2. CREAR LA VENTANA Y EL DISPLAY
       ------------------------------------------------------------ */
@@ -685,27 +702,3 @@ int main()
 
   //  return 0;
 //}
-/*         if(chequeoGravedad == 0)
-         {
-            if(cayendo == false)
-            {
-               al_start_timer(tempGravedad);
-               cayendo = true;
-            }
-            valorTimerGravedad = al_get_timer_count(tempGravedad);
-            if(valorTimerGravedad % 2 == 0)
-            {
-               valorTimerGravedad++;
-            }
-            posY = posY + valorTimerGravedad/50.0;
-            if(collide(font, posX, posY, &bloqueColisionX, &bloqueColisionY) == true)
-            {
-               posY = posY - ANCHO;
-            }
-            break;
-         }
-         else
-         {
-            al_stop_timer(tempGravedad);
-            cayendo = false;
-         }*/
