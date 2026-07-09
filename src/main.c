@@ -24,10 +24,13 @@
 #include <allegro5/allegro_image.h>
 #include <allegro5/allegro_primitives.h>
 #include <allegro5/allegro_image.h>
-#include <allegro5/allegro_primitives.h> // Sigue: Interaccion con otros elementos (semiplataformas, enemigos, balas, corazones extra), scrolling, pasar personajes y enemigos a una estructura, implementar joystick
+#include <allegro5/allegro_primitives.h> // Sigue: Crear funcion que cargue mapa por archivo, colocar punto de inicio en archivo, interaccion con otros elementos (semiplataformas, enemigos, balas, corazones extra), scrolling, pasar enemigos a un arreglo de estructura, implementar joystick
+
+#define KEY_SEEN     1
+#define KEY_RELEASED 2
 
 #define SPAWNPOINT_X 240 // Punto de inicio
-#define SPAWNPOINT_Y 160
+#define SPAWNPOINT_Y 420
 
 #define LARGO 40 // Largo de un bloque
 #define ANCHO 40 // Ancho de un bloque
@@ -37,14 +40,27 @@
 
 #define SPEED_FACTOR 7
 #define TERMINAL_VELOCITY 40 // 40 px/seg.
+#define INVINCIBILITY_FRAMES 120
+#define PARRY_FRAMES 30
 
 typedef struct
 {
    float posX;
    float posY;
+   float posParryX;
+   float posParryY;
    int vida;
 }
 entidad;
+
+typedef struct
+{
+   bool Arriba;
+   bool Abajo;
+   bool Izquierda;
+   bool Derecha;
+}
+_direccion;
 
 void must_init(bool test, const char *description)
 {
@@ -56,7 +72,7 @@ void must_init(bool test, const char *description)
 
 bool collide(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY)
 {
-   int chequeoColision=0;
+   int chequeoColision = 0;
 
    if(entidad.posX+LARGO>*sueloX)
    {
@@ -76,6 +92,39 @@ bool collide(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY)
    if(*sueloY+ANCHO>entidad.posY)
    {
       al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 50, 0, "DEBUG: condicion 4: true");
+      chequeoColision++;
+   }
+
+   if(chequeoColision==4)
+   {
+      return true;
+   }
+
+   return false;
+}
+
+bool collideParry(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY)
+{
+   int chequeoColision = 0;
+
+   if(entidad.posParryX + LARGO * 2 > *sueloX)
+   {
+      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 120, 0, "DEBUG: condicion 1: true");
+      chequeoColision++;
+   }
+   if(*sueloX + LARGO > entidad.posParryX)
+   {
+      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 130, 0, "DEBUG: condicion 2: true");
+      chequeoColision++;
+   }
+   if(entidad.posParryY + ANCHO * 2 > *sueloY)
+   {
+      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 140, 0, "DEBUG: condicion 3: true");
+      chequeoColision++;
+   }
+   if(*sueloY + ANCHO > entidad.posParryY)
+   {
+      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 150, 0, "DEBUG: condicion 4: true");
       chequeoColision++;
    }
 
@@ -120,16 +169,16 @@ bool collideSuelo(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sue
    return false;
 }
 
-float anularMovimientoX(ALLEGRO_FONT* font, bool direccionIzquierda, bool direccionDerecha, entidad entidad, float *sueloX) // Deshace el movimiento en el eje X al chocar
+float anularMovimientoX(ALLEGRO_FONT* font, entidad entidad, _direccion direccion, float *sueloX) // Deshace el movimiento en el eje X al chocar
 {
    float ajusteX;
    ajusteX = entidad.posX;
 
-   if(direccionIzquierda == true)
+   if(direccion.Izquierda == true)
    {
       ajusteX = *sueloX + LARGO;
    }
-   if(direccionDerecha == true)
+   if(direccion.Derecha == true)
    {
       ajusteX = *sueloX - LARGO;
    }
@@ -137,22 +186,24 @@ float anularMovimientoX(ALLEGRO_FONT* font, bool direccionIzquierda, bool direcc
    return ajusteX;
 }
 
-float anularMovimientoY(ALLEGRO_FONT* font, bool direccionArriba, bool direccionAbajo, entidad entidad, float *sueloY) // Deshace el movimiento en el eje Y al chocar
+float anularMovimientoY(ALLEGRO_FONT* font, entidad entidad, float *sueloY) // Deshace el movimiento en el eje Y al chocar
 {
    float ajusteY;
    ajusteY = entidad.posY;
 
-   if(entidad.posY+ANCHO>*sueloY)
+   if(ajusteY+ANCHO>*sueloY)
    {
-      ajusteY = *sueloY + ANCHO;
+      ajusteY = *sueloY - ANCHO;
    }
-   if(*sueloY+ANCHO>entidad.posY)
+   if(ajusteY<*sueloY+ANCHO)
    {
       ajusteY = *sueloY - ANCHO;
    }
 
    return ajusteY;
 }
+
+// escribir funcion direccionMovimiento, de tipo struct direccion, que retorna la direccion de movimiento del personaje
 
 int main()
 {
@@ -188,7 +239,6 @@ int main()
 
     /*ALLEGRO_BITMAP* mysha = al_load_bitmap("mysha.png");
     must_init(mysha, "mysha");*/
-
    al_register_event_source(queue, al_get_keyboard_event_source());
    al_register_event_source(queue, al_get_display_event_source(disp));
    al_register_event_source(queue, al_get_timer_event_source(timer));
@@ -200,25 +250,35 @@ int main()
    entidad jugador;
    jugador.posX = SPAWNPOINT_X; // Punto de inicio
    jugador.posY = SPAWNPOINT_Y;
-   jugador.vida = 9;
+   jugador.vida = 99;
+
    int iFrames = 0;
+   int parryFrames = 0;
 
-   bool direccionArriba = false; // Variables que registran la direccion de colision con paredes.
-   bool direccionAbajo = false;
-   bool direccionIzquierda = false;
-   bool direccionDerecha = false;
+   _direccion direccion; // Estructura que registra la direccion de colision con paredes.
+   direccion.Arriba = false;
+   direccion.Abajo = false;
+   direccion.Izquierda = false;
+   direccion.Derecha = false;
+   
 
-   int valorTimerGravedad = 0; // Obtiene el valor del temporizador de gravedad.
+   int valorTimerGravedad; // Obtiene el valor del temporizador de gravedad.
    bool jugadorEnAire = true; // Revisa si esta cayendo el cuadrado personaje.
-   bool teclaPresionada = 0;
+   bool cayendo = true;
+   bool primeraVez = false;
+
+   bool teclaSoltada = false;
+   bool puedeHacerParry = true;
+
    int i,j; // Contadores generales reutilizables.
    float puntoX, puntoY; // Reciben los valores de i y j para traspasarlos a variables flotantes que puedan ser traspasadas a las funciones de colision.
 
    FILE *contenidoMapa1; // Variables de obtencion de datos de "mapa1.txt".
    int valorRecibido;
 
-   bool flag = 0;
+   bool flag = 0; // BANDERA DE PRUEBA
 
+   /*sacar la lectura del archivo y carga de mapa a una funcion, psar como parametros mapa y jugador*/
    contenidoMapa1 = fopen("mapa1.txt", "r");
    must_init(contenidoMapa1, "mapa1");
 
@@ -254,9 +314,6 @@ int main()
 
    al_start_timer(timer);
 
-   #define KEY_SEEN     1    
-   #define KEY_RELEASED 2
-
    unsigned char key[ALLEGRO_KEY_MAX];
    memset(key, 0, sizeof(key));
 
@@ -267,26 +324,39 @@ int main()
       switch(event.type)
       {
          case ALLEGRO_EVENT_TIMER:
-
             if(key[ALLEGRO_KEY_UP])
             {
-               jugador.posY = jugador.posY - 20;
-               direccionArriba = true;
+               if(valorTimerGravedad == 0 && primeraVez == false)
+               {
+                  al_set_timer_count(tempGravedad, -20);
+                  primeraVez = true;
+               }
+               if(teclaSoltada == true && puedeHacerParry == true)
+               {
+                  parryFrames = PARRY_FRAMES; // Otorga 30 frames de parry.
+               }
+               jugadorEnAire = true;
+               teclaSoltada = false;
+               direccion.Arriba = true;
+            }
+            else if(jugadorEnAire == true)
+            {
+               teclaSoltada = true;
             }
             if(key[ALLEGRO_KEY_DOWN])
             {
                //posY=posY+SPEED_FACTOR;
-               direccionAbajo = true;
+               direccion.Abajo = true;
             }
             if(key[ALLEGRO_KEY_LEFT])
             {
-               jugador.posX = jugador.posX-SPEED_FACTOR;
-               direccionIzquierda = true;
+               jugador.posX = jugador.posX - SPEED_FACTOR;
+               direccion.Izquierda = true;
             }
             if(key[ALLEGRO_KEY_RIGHT])
             {
-               jugador.posX = jugador.posX+SPEED_FACTOR;
-               direccionDerecha = true;
+               jugador.posX = jugador.posX + SPEED_FACTOR;
+               direccion.Derecha = true;
             }
 
             if(key[ALLEGRO_KEY_ESCAPE])
@@ -320,27 +390,18 @@ int main()
 
          // 1: Realizar los ajustes necesarios en el cuadrado personaje.
 
-         if(jugadorEnAire == true)
+         valorTimerGravedad = al_get_timer_count(tempGravedad);
+         jugador.posParryX = jugador.posX - 20;
+         jugador.posParryY = jugador.posY - 20;
+         if(parryFrames > 0)
          {
-         for(i = 0; i < ANCHO_MAPA; i++) // Define el valor de jugadorEnAire.
+            puedeHacerParry = false;
+         }
+         else
          {
-            for(j = 0; j < LARGO_MAPA; j++)
-            {
-               puntoX = j*LARGO;
-               puntoY = i*ANCHO;
-               if(mapa[i][j] == 1)
-               {
-                  if(collideSuelo(font, jugador, &puntoX, &puntoY) == true)
-                  {
-                     jugadorEnAire = false;
-                     al_set_timer_count(tempGravedad, 0);
-                     al_stop_timer(tempGravedad);
-                     break;
-                  }
-               }
-            }
+            puedeHacerParry = true;
          }
-         }
+
          if(jugadorEnAire == true) // Logica de gravedad.
          {
             al_start_timer(tempGravedad);
@@ -349,8 +410,42 @@ int main()
                al_stop_timer(tempGravedad);
                al_set_timer_count(tempGravedad, TERMINAL_VELOCITY);
             }
-            valorTimerGravedad = al_get_timer_count(tempGravedad);
             jugador.posY = jugador.posY + valorTimerGravedad;
+            jugador.posParryY = jugador.posY - 20;
+            cayendo = true;
+         }
+
+         for(i = 0; i < ANCHO_MAPA; i++) // Define el valor de jugadorEnAire.
+         {
+            for(j = 0; j < LARGO_MAPA; j++)
+            {
+               puntoX = j*LARGO;
+               puntoY = i*ANCHO;
+               if(mapa[i][j] == 1)
+               {
+                  if(jugadorEnAire == true && collideSuelo(font, jugador, &puntoX, &puntoY) == true)
+                  {
+                     jugadorEnAire = false;
+                     al_set_timer_count(tempGravedad, 0);
+                     al_stop_timer(tempGravedad);
+                     cayendo = false;
+                     primeraVez = false;
+                     parryFrames = 0;
+                     teclaSoltada = false;
+                     puedeHacerParry = true;
+                     break;
+                  }
+               }
+            }
+         }
+
+         if(parryFrames > 0)
+         {
+            al_draw_filled_rectangle(jugador.posParryX, jugador.posParryY, jugador.posParryX + LARGO * 2, jugador.posParryY + ANCHO * 2, al_map_rgb(255, 0, 255));
+         }
+         else
+         {
+            al_draw_filled_rectangle(jugador.posParryX, jugador.posParryY, jugador.posParryX + LARGO * 2, jugador.posParryY + ANCHO * 2, al_map_rgb(100, 0, 100));
          }
 
          for(i = 0; i < ANCHO_MAPA; i++) // Revisa las colisiones en cada bloque.
@@ -365,22 +460,32 @@ int main()
                   {
                      // Deshace el movimiento del personaje respecto a la colision.
                      al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 10, 0, "DEBUG: collide = %d", collide(font, jugador, &puntoX, &puntoY));
-                     if(jugadorEnAire == true)
+                     if(/*jugadorEnAire == */true)
                      {
-                        jugador.posY = anularMovimientoY(font, direccionArriba, direccionAbajo, jugador, &puntoY);
+                        jugador.posY = anularMovimientoY(font, jugador, &puntoY);
+                        al_set_timer_count(tempGravedad, 0);
                      }
                      else
                      {
-                        jugador.posX = anularMovimientoX(font, direccionIzquierda, direccionDerecha, jugador, &puntoX);
+                        jugador.posX = anularMovimientoX(font, jugador, direccion, &puntoX);
                      }
                   }
                }
-               if(mapa[i][j] == 2) // Colision personaje-pincho:
+               if(mapa[i][j] == 3) // Colision personaje-pincho:
                {
                   if(collide(font, jugador, &puntoX, &puntoY) == true && iFrames == 0)
                   {
                      jugador.vida--; // Resta 1 punto de vida.
-                     iFrames = 120; // Otorga 120 frames de invencibilidad.
+                     iFrames = INVINCIBILITY_FRAMES; // Otorga 120 frames de invencibilidad.
+                  }
+               }
+               if(mapa[i][j] == 4 && direccion.Arriba == true) // Colision parry propio-objeto parriable:
+               {
+                  if(collideParry(font, jugador, &puntoX, &puntoY) == true && parryFrames > 0) // Si se efectua un parry correctamente:
+                  {
+                     al_set_timer_count(tempGravedad, -20);
+                     teclaSoltada = true;
+                     parryFrames = 0;
                   }
                }
             }
@@ -389,14 +494,14 @@ int main()
          if(jugador.vida <= 0) // Logica de game over.
          {
             al_draw_textf(font, al_map_rgb(255, 13, 69), 600,360, 0, "GAME OVER");
-            if(direccionIzquierda == true)
+            /*if(direccion.Izquierda == true)
             {
                jugador.posX = jugador.posX + SPEED_FACTOR;
             }
-            if(direccionDerecha == true)
+            if(direccion.Derecha == true)
             {
                jugador.posX = jugador.posX - SPEED_FACTOR;
-            }
+            }*/
 
          }
 
@@ -408,28 +513,38 @@ int main()
 
          // 2: Dibujar el siguiente frame.
 
-         for(i = 0; i < ANCHO_MAPA; i++)
+         for(i = 0; i < ANCHO_MAPA; i++) // Dibuja el respectivo mapa (pasar a funcion despues)
          {
             for(j = 0; j < LARGO_MAPA; j++)
             {
-               if(mapa[i][j] == 1)
+               if(mapa[i][j] == 1) // Suelo
                {
                   al_draw_textf(font, al_map_rgb(255, 255, 255), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]); // Dibuja la posicion en la matriz del cuadrado suelo en pantalla.
-                  al_draw_filled_rectangle(j*LARGO, i*ANCHO, j*LARGO + LARGO, i*ANCHO + ANCHO, al_map_rgba_f(0, 0, 0.5, 0.5)); // Dibuja el cuadrado suelo.
+                  al_draw_filled_rectangle(j*LARGO, i*ANCHO, j*LARGO + LARGO, i*ANCHO + ANCHO, al_map_rgba_f(0, 0, 0.5, 0.2)); // Dibuja el cuadrado suelo.
                }
-               if(mapa[i][j] == 2)
+               if(mapa[i][j] == 2) // Plataforma atravesable
                {
                   al_draw_textf(font, al_map_rgb(255, 255, 255), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
-                  al_draw_filled_rectangle(j*LARGO, i*ANCHO, j*LARGO + LARGO, i*ANCHO + ANCHO, al_map_rgba_f(0.5, 0, 0, 0.5));
+                  al_draw_filled_rectangle(j*LARGO, i*ANCHO, j*LARGO + LARGO, i*ANCHO + ANCHO, al_map_rgba_f(0, 0.8, 0.8, 0.2));
                }
-               if(mapa[i][j] == 0)
+               if(mapa[i][j] == 3) // Enemigo (obstaculo)
                {
-                  al_draw_textf(font, al_map_rgb(100, 100, 100), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
+                  al_draw_textf(font, al_map_rgb(255, 255, 255), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
+                  al_draw_filled_rectangle(j*LARGO, i*ANCHO, j*LARGO + LARGO, i*ANCHO + ANCHO, al_map_rgba_f(0.8, 0, 0, 0.2));
+               }
+               if(mapa[i][j] == 4) // Parry enemigo
+               {
+                  al_draw_textf(font, al_map_rgb(255, 255, 255), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
+                  al_draw_filled_rectangle(j*LARGO, i*ANCHO, j*LARGO + LARGO, i*ANCHO + ANCHO, al_map_rgba_f(1, 0.5, 0.6, 0.2));
+               }
+               if(mapa[i][j] == 0) // Vacio
+               {
+                  al_draw_textf(font, al_map_rgb(50, 50, 50), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
                }
             }
          }
 
-         al_draw_filled_rectangle(jugador.posX, jugador.posY, jugador.posX + LARGO, jugador.posY + ANCHO, al_map_rgb(255, 0, 0)); // Rectangulo de personaje.
+         al_draw_filled_rectangle(jugador.posX, jugador.posY, jugador.posX + LARGO, jugador.posY + ANCHO, al_map_rgb(255, 255, 0)); // Rectangulo de personaje.
          //al_draw_bitmap(mysha, 100, 100, 0);
 
          // Dibujar informacion de debug.
@@ -438,24 +553,24 @@ int main()
 
          valorTimerGravedad = al_get_timer_count(tempGravedad);
          al_draw_textf(font, al_map_rgb(255, 255, 255), 250, 0, 0, "Temporizador de gravedad: %d", valorTimerGravedad);
-         al_draw_textf(font, al_map_rgb(255, 255, 255), 100, 200, 0, "teclaPresionada: %d", teclaPresionada);
+         al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 110, 0, "cayendo: %d", cayendo);
 
          al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 700, 0, "vida: %d", jugador.vida);
          al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 710, 0, "iFrames: %d", iFrames);
 
-         if(direccionArriba == true) // Imprime las direcciones ingresadas.
+         if(direccion.Arriba == true) // Imprime las direcciones ingresadas.
          {
             al_draw_textf(font, al_map_rgb(255, 255, 255), 10, 70, 0, "^");
          }
-         if(direccionAbajo == true)
+         if(direccion.Abajo == true)
          {
             al_draw_textf(font, al_map_rgb(255, 255, 255), 10, 90, 0, "v");
          }
-         if(direccionIzquierda == true)
+         if(direccion.Izquierda == true)
          {
             al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 80, 0, "<");
          }
-         if(direccionDerecha == true)
+         if(direccion.Derecha == true)
          {
             al_draw_textf(font, al_map_rgb(255, 255, 255), 20, 80, 0, ">");
          }
@@ -481,20 +596,31 @@ int main()
          {
             al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 10, 0, "DEBUG: collideSuelo = %d", collideSuelo(font, jugador, &puntoX, &puntoY));
          }
-         al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 100, 0, "DEBUG: jugadorEnAire = %d", jugadorEnAire);
+         al_draw_textf(font, al_map_rgb(255, 255, 255), 350, 100, 0, "DEBUG: jugadorEnAire = %d", jugadorEnAire);
+         al_draw_textf(font, al_map_rgb(255, 255, 255), 350, 110, 0, "DEBUG: teclaSoltada = %d", teclaSoltada);
+         al_draw_textf(font, al_map_rgb(255, 255, 255), 350, 120, 0, "DEBUG: puedeHacerParry = %d", puedeHacerParry);
+         al_draw_textf(font, al_map_rgb(255, 255, 255), 350, 130, 0, "DEBUG: parryFrames = %d", parryFrames);
 
-         direccionArriba = false; // Reinicia la direccion (esta se obtiene cada frame).
-         direccionAbajo = false;
-         direccionIzquierda = false;
-         direccionDerecha = false;
+         direccion.Arriba = false; // Reinicia la direccion (esta se obtiene cada frame).
+         direccion.Abajo = false;
+         direccion.Izquierda = false;
+         direccion.Derecha = false;
 
          jugadorEnAire = true;
+         cayendo = true;
 
          flag = 0;
+
+         jugador.posParryX = jugador.posX - 20;
+         jugador.posParryY = jugador.posY - 20;
 
          if(iFrames > 0)
          {
             iFrames--;
+         }
+         if(parryFrames > 0)
+         {
+            parryFrames--;
          }
 
          al_flip_display();
