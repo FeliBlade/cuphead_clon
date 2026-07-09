@@ -13,16 +13,13 @@
        1. INICIALIZACIÓN DE ALLEGRO
        ------------------------------------------------------------ */
 
-#include <allegro5/color.h>
-#include <allegro5/timer.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <allegro5/allegro5.h>
+#include <allegro5/color.h>
+#include <allegro5/timer.h>
 #include <allegro5/allegro_font.h>
-#include <allegro5/allegro_font.h>
-#include <allegro5/allegro_image.h>
-#include <allegro5/allegro_primitives.h>
 #include <allegro5/allegro_image.h>
 #include <allegro5/allegro_primitives.h> // Sigue: Crear funcion que cargue mapa por archivo, colocar punto de inicio en archivo, interaccion con otros elementos (semiplataformas, enemigos, balas, corazones extra), scrolling, pasar enemigos a un arreglo de estructura, implementar joystick
 
@@ -70,7 +67,7 @@ bool collideSuelo(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sue
 float anularMovimientoX(ALLEGRO_FONT* font, entidad entidad, _direccion direccion, float *sueloX);
 float anularMovimientoY(ALLEGRO_FONT* font, entidad entidad, float *sueloY);
 
-void cargarMapa(int mapa[ANCHO_MAPA][LARGO_MAPA]);
+void cargarMapa(int mapa[ANCHO_MAPA][LARGO_MAPA], int nivel);
 
 // escribir funcion direccionMovimiento, de tipo struct direccion, que retorna la direccion de movimiento del personaje
 // en main grabaria posY en una variable y al inicio del bucle, la funcion compararia sus valores para determinar el movimiento
@@ -145,16 +142,16 @@ int main()
 
    FILE *contenidoMapa1; // Variables de obtencion de datos de "mapa1.txt".
    int valorRecibido;
+   int nivel = 1; // Numero de nivel.
 
    bool flag = 0; // BANDERA DE PRUEBA
 
-   /*sacar la lectura del archivo y carga de mapa a una funcion, psar como parametros mapa y jugador*/
-   contenidoMapa1 = fopen("mapa1.txt", "r");
-   must_init(contenidoMapa1, "mapa1");
+   int mapa[ANCHO_MAPA][LARGO_MAPA] = {0};
 
-   int mapa[ANCHO_MAPA][LARGO_MAPA];
+   cargarMapa(mapa, nivel);
+   //cargarMapa(maṕa);
 
-   for(i = 0; i < ANCHO_MAPA; i++)
+   /*for(i = 0; i < ANCHO_MAPA; i++)
    {
       for(j = 0; j < LARGO_MAPA; j++)
       {
@@ -169,7 +166,7 @@ int main()
       }
       printf("\n");
    }
-   printf("\n");
+   printf("\n");*/
 
    for(i = 0; i < ANCHO_MAPA; i++)
    {
@@ -179,6 +176,7 @@ int main()
       }
       printf("\n");
    }
+   printf("uno\n");
 
    ALLEGRO_KEYBOARD_STATE ks;
 
@@ -380,6 +378,7 @@ int main()
          {
             jugador.posX = SPAWNPOINT_X;
             jugador.posY = SPAWNPOINT_Y;
+            al_set_timer_count(tempGravedad, 0);
          }
 
          // 2: Dibujar el siguiente frame.
@@ -653,11 +652,52 @@ float anularMovimientoY(ALLEGRO_FONT* font, entidad entidad, float *sueloY) // D
    return ajusteY;
 }
 
-void cargarMapa(int mapa[ANCHO_MAPA][LARGO_MAPA])
+void cargarMapa(int mapa[ANCHO_MAPA][LARGO_MAPA], int nivel)
+//void cargarMapa(char *ruta_archivo, entidad jugador)
 {
    FILE *contenidoMapa;
-   int valorRecibido;
+   int i, j, valorRecibido;
+
+   /*sacar la lectura del archivo y carga de mapa a una funcion, psar como parametros mapa y jugador*/
+
+   // switch o if donde pasas el nivle y dices si es 1 carga mapa 1, si es 2 carga 2
+
+   if(nivel == 1)
+   {
+      contenidoMapa = fopen("mapa1.txt", "r");
+      must_init(contenidoMapa, "mapa1");
+   }
+
+// ¨Poner verificacion si contenidoMapa! tirar error y cerrar
+
+   for(i = 0; i < ANCHO_MAPA; i++)
+   {
+      for(j = 0; j < LARGO_MAPA; j++)
+      {
+         if(fscanf(contenidoMapa, "%d", &valorRecibido) != EOF)
+         {
+            mapa[i][j] = valorRecibido;
+         }
+         else
+         {
+            break;
+         }
+      }
+   }
+/*
+   for(i = 0; i < ANCHO_MAPA; i++)
+   {
+      for(j = 0; j < LARGO_MAPA; j++)
+      {
+         printf("%d  ", mapa[i][j]);
+      }
+      printf("\n");
+   }
+   printf("dos\n");
+*/
+   return;
 }
+
    /* ------------------------------------------------------------
       2. CREAR LA VENTANA Y EL DISPLAY
       ------------------------------------------------------------ */
