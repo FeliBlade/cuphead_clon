@@ -43,8 +43,8 @@
 
 #define MAX_ENEMIGOS 100
 
-#define TAMANHO_A 1
 #define VIDA_ENEMIGO_A 20
+#define VELOCIDAD_ENEMIGO_A 4
 
 #define OUT_OF_BOUNDS -100
 
@@ -57,8 +57,9 @@ typedef struct
    float posParryX;
    float posParryY;
    int vida;
-   int direccionMovimiento;
-   bool colisionEnemigo;
+   int direccionMovimientoA;
+   bool colisionEnemigoA;
+   float puntoColisionA;
 }
 entidad;
 
@@ -346,15 +347,40 @@ int main()
 
          for(contEnemigos = 0; contEnemigos < cantidadEnemigosA; contEnemigos++) // Movimiento de los enemigos A.
          {
-            if(enemigosA[contEnemigos].colisionEnemigo == true) // Si chocan:
+            if(enemigosA[contEnemigos].colisionEnemigoA == true) // Si chocan:
             {
-               enemigosA[contEnemigos].direccionMovimiento *= -1; // Invierte la direccion de movimiento.
-               enemigosA[contEnemigos].colisionEnemigo = false;
+               if(enemigosA[contEnemigos].direccionMovimientoA == VELOCIDAD_ENEMIGO_A) // Anula el movimiento del enemigo segun el valor de direccionMovimiento.
+               {
+                  enemigosA[contEnemigos].posX = enemigosA[contEnemigos].puntoColisionA - LARGO;
+               }
+               else if(enemigosA[contEnemigos].direccionMovimientoA == -VELOCIDAD_ENEMIGO_A)
+               {
+                  enemigosA[contEnemigos].posX = enemigosA[contEnemigos].puntoColisionA + LARGO;
+               }
+               enemigosA[contEnemigos].direccionMovimientoA *= -1; // Invierte la direccion de movimiento.
+               enemigosA[contEnemigos].colisionEnemigoA = false; // Anula la bandera de colision para que no se de vuelta de nuevo.
             }
-            enemigosA[contEnemigos].posX += enemigosA[contEnemigos].direccionMovimiento; // Desplaza al enemigo correspondiente.
+            enemigosA[contEnemigos].posX += enemigosA[contEnemigos].direccionMovimientoA; // Desplaza al enemigo correspondiente.
          }
          
-         for(i = 0; i < ANCHO_MAPA; i++) // Revisa las colisiones en los enemigos que las requieran. 
+         for(contEnemigos = 0; contEnemigos < cantidadEnemigosA; contEnemigos++)  // Revisa las colisiones en los enemigos A.
+         {
+            int fila = enemigosA[contEnemigos].posY / ANCHO;
+            for(j = 0; j < LARGO_MAPA; j++)
+            {
+               if(mapa[fila][j] == 1)
+               {
+                  puntoX = j*LARGO;
+                  if(enemigosA[contEnemigos].posX + LARGO > puntoX && puntoX + LARGO > enemigosA[contEnemigos].posX)
+                  {
+                     enemigosA[contEnemigos].colisionEnemigoA = true;
+                     enemigosA[contEnemigos].puntoColisionA = puntoX;
+                     break;
+                  }
+               }
+            }
+         }
+         /*for(i = 0; i < ANCHO_MAPA; i++) // (dejar comentado por si falla el reemplazo)
          {
             for(j = 0; j < LARGO_MAPA; j++)
             {
@@ -362,19 +388,20 @@ int main()
                {
                   puntoX = j*LARGO;
                   puntoY = i*ANCHO;
-                  for(contEnemigos = 0; contEnemigos < cantidadEnemigosA; contEnemigos++) // Movimiento de los enemigos
+                  for(contEnemigos = 0; contEnemigos < cantidadEnemigosA; contEnemigos++) // Enemigos A
                   {
                      if(enemigosA[contEnemigos].posY == puntoY && enemigosA[contEnemigos].posX + LARGO > puntoX && puntoX + LARGO > enemigosA[contEnemigos].posX) // Si chocan:
                      {
                         enemigosA[contEnemigos].colisionEnemigo = true;
+                        enemigosA[contEnemigos].puntoColision = puntoX;
                         break;
                      }
                   }
                }
             }
-         }
+         }*/
 
-         for(i = 0; i < ANCHO_MAPA; i++) // Revisa las colisiones en cada bloque.
+         for(i = 0; i < ANCHO_MAPA; i++) // Revisa las colisiones en cada bloque. (REVISAR LAS COLISIONES CON LOS ENEMIGOS DINAMICOS RESTANTES)
          {
             for(j = 0; j < LARGO_MAPA; j++)
             {
@@ -406,14 +433,25 @@ int main()
                         jugador.posY = anularMovimientoY(font, jugador, &puntoY);
                      }
                   }
-                  if(mapa[i][j] == 3) // Colision personaje-enemigo:
+                  for(contEnemigos = 0; contEnemigos < cantidadEnemigosA; contEnemigos++) // Colision personaje-enemigo A:
+                  {
+                     if(fabs(enemigosA[contEnemigos].posX - jugador.posX) <= LARGO * 3 && fabs(enemigosA[contEnemigos].posY - jugador.posY) <= ANCHO * 3)
+                     {
+                        if(collide(font, jugador, &enemigosA[contEnemigos].posX, &enemigosA[contEnemigos].posY) == true && iFrames == 0)
+                        {
+                           jugador.vida--; // Resta 1 punto de vida.
+                           iFrames = INVINCIBILITY_FRAMES; // Otorga 120 frames de invencibilidad.
+                        }
+                     }
+                  }
+                  /*if(mapa[i][j] == 3) // Colision personaje-enemigo:
                   {
                      if(collide(font, jugador, &puntoX, &puntoY) == true && iFrames == 0)
                      {
                         jugador.vida--; // Resta 1 punto de vida.
                         iFrames = INVINCIBILITY_FRAMES; // Otorga 120 frames de invencibilidad.
                      }
-                  }
+                  }*/
                   if(mapa[i][j] == 4 && direccion.Arriba == true) // Colision parry propio-objeto parriable:
                   {
                      if(collideParry(font, jugador, &puntoX, &puntoY) == true && parryFrames > 0) // Si se efectua un parry correctamente:
@@ -512,10 +550,10 @@ int main()
          {
             camaraX = 0;
          }
-         if(camaraY < 0)
+         /*if(camaraY < 0)
          {
             camaraY = 0;
-         }
+         }*/
          if(camaraX > LARGO_MAPA * LARGO - LARGO_PANTALLA)
          {
             camaraX = LARGO_MAPA * LARGO - LARGO_PANTALLA;
@@ -604,8 +642,8 @@ int main()
          al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 500, 0, "camaraX: %f", camaraX);
          al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 510, 0, "camaraY: %f", camaraY);
 
-         al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 530, 0, "enemigosA[0].direccionMovimiento: %d", enemigosA[0].direccionMovimiento);
-         al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 540, 0, "enemigosA[0].colisionEnemigo: %d", enemigosA[0].colisionEnemigo);
+         al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 530, 0, "enemigosA[0].direccionMovimiento: %d", enemigosA[0].direccionMovimientoA);
+         al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 540, 0, "enemigosA[0].colisionEnemigo: %d", enemigosA[0].colisionEnemigoA);
 
          al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 150, 0, "enemigosA[0].posX = %f", enemigosA[0].posX);
          al_draw_textf(font, al_map_rgb(255, 255, 255), 200, 160, 0, "enemigosA[0].posY = %f", enemigosA[0].posY);
@@ -861,21 +899,6 @@ void cargarMapa(int mapa[ANCHO_MAPA][LARGO_MAPA], int nivel, entidad *jugador, e
       printf("no existe el nivel\n");
       exit(1);
    }
-   /*if(nivel == 1)
-   {
-      contenidoMapa = fopen("mapa1.txt", "r");
-      must_init(contenidoMapa, "mapa1");
-   }
-   if(nivel == 2)
-   {
-      contenidoMapa = fopen("mapa2.txt", "r");
-      must_init(contenidoMapa, "mapa2");
-   }
-   if(nivel == 3)
-   {
-      printf("no existe el nivel\n");
-      exit(1);
-   }*/
 
 // ¨Poner verificacion si contenidoMapa! tirar error y cerrar
 
@@ -895,8 +918,8 @@ void cargarMapa(int mapa[ANCHO_MAPA][LARGO_MAPA], int nivel, entidad *jugador, e
                   enemigosA[*cantidadEnemigosA].posX = j*LARGO;
                   enemigosA[*cantidadEnemigosA].posY = i*ANCHO;
                   enemigosA[*cantidadEnemigosA].vida = VIDA_ENEMIGO_A;
-                  enemigosA[*cantidadEnemigosA].direccionMovimiento = -1;
-                  enemigosA[*cantidadEnemigosA].colisionEnemigo = false;
+                  enemigosA[*cantidadEnemigosA].direccionMovimientoA = -VELOCIDAD_ENEMIGO_A;
+                  enemigosA[*cantidadEnemigosA].colisionEnemigoA = false;
                   (*cantidadEnemigosA)++;
                }
                else
