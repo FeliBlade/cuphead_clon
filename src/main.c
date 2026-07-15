@@ -24,7 +24,7 @@
 #include <allegro5/color.h> // El salto permite que cuando el jugador se caiga al fondo de la pantalla, pueda saltar de nuevo cuando valorTimerGravedad es 0.
 #include <allegro5/timer.h> // El parry no tiene cooldown.
 #include <allegro5/allegro_audio.h> // La funcion anularMovimientoY lleva al personaje al tope del bloque.
-#include <allegro5/allegro_acodec.h> // Se descoloca el cuadrado parry al moverse (puede ser por el scrolling con la camara)
+#include <allegro5/allegro_acodec.h> // Se descoloca el cuadrado parry al moverse (puede ser por el scrolling con la camara o por la mal optimizada revision de colision de enemigos)
 #include <allegro5/allegro_font.h> // No funcionan las colsiones con el jugador y los enemigos E.
 #include <allegro5/allegro_image.h>
 #include <allegro5/allegro_primitives.h> // Sigue: Interaccion con otros elementos (semiplataformas, enemigos, balas, corazones extra), pasar enemigos a un arreglo de estructura, implementar joystick
@@ -100,8 +100,8 @@ void must_init(bool test, const char *description);
 bool collide(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY);
 bool collideParry(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY);
 bool collideSuelo(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY);
-float anularMovimientoX(ALLEGRO_FONT* font, entidad entidad, _direccion direccion, float *sueloX);
-float anularMovimientoY(ALLEGRO_FONT* font, entidad entidad, float *sueloY);
+float anularMovimientoX(ALLEGRO_FONT* font, entidad *entidad, _direccion direccion, float *sueloX);
+float anularMovimientoY(ALLEGRO_FONT* font, entidad *entidad, float *sueloY);
 
 void cargarMapa(VARIABLES_CARGARMAPA);
 
@@ -430,7 +430,7 @@ int main()
                enemigosC[contEnemigos].valorTimerEnemigosC = al_get_timer_count(enemigosC[contEnemigos].tempEnemigosC);
                enemigosC[contEnemigos].posX = enemigosC[contEnemigos].nodoCX + 100 * sinf(enemigosC[contEnemigos].valorTimerEnemigosC / 25);
                enemigosC[contEnemigos].posY = enemigosC[contEnemigos].nodoCY + 25 * cosf(enemigosC[contEnemigos].valorTimerEnemigosC / 25) * cosf(enemigosC[contEnemigos].valorTimerEnemigosC / 25);
-               enemigosC[contEnemigos].nodoCY += 1;
+               enemigosC[contEnemigos].nodoCY += 2;
             }
          }
 
@@ -455,12 +455,12 @@ int main()
                         al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 10, 0, "DEBUG: collide = %d", collide(font, jugador, &puntoX, &puntoY));
                         if(jugadorEnAire == false || (direccion.Izquierda == false && direccion.Derecha == false))
                         {
-                           jugador.posY = anularMovimientoY(font, jugador, &puntoY);
+                           jugador.posY = anularMovimientoY(font, &jugador, &puntoY);
                            al_set_timer_count(tempGravedad, 0);
                         }
-                        if(direccion.Izquierda == true || direccion.Derecha == true)
+                        if(valorTimerGravedad == 0 && (direccion.Izquierda == true || direccion.Derecha == true))
                         {
-                           //jugador.posX = anularMovimientoX(font, jugador, direccion, &puntoX);
+                           jugador.posX = anularMovimientoX(font, &jugador, direccion, &puntoX);
                         }
                      }
                   }
@@ -468,7 +468,7 @@ int main()
                   {
                      if(collide(font, jugador, &puntoX, &puntoY) == true && jugador.posY <= puntoY && cayendo == true) // Deben chocar, el personaje debe estar mas alto que la plataforma, y el personaje debe estar cayendo estrictamente para abajo.
                      {
-                        jugador.posY = anularMovimientoY(font, jugador, &puntoY);
+                        jugador.posY = anularMovimientoY(font, &jugador, &puntoY);
                      }
                   }
                   if(mapa[i][j] == '/') // Colision personaje-pincho:
@@ -505,7 +505,7 @@ int main()
                         }
                      }
                   }
-                  for(contEnemigos = 0; contEnemigos < cantidadEnemigosC; contEnemigos++) // Colision personaje-enemigo E:
+                  for(contEnemigos = 0; contEnemigos < cantidadEnemigosE; contEnemigos++) // Colision personaje-enemigo E:
                   {
                      if(fabs(enemigosE[contEnemigos].posX - jugador.posX) <= LARGO * 3 && fabs(enemigosE[contEnemigos].posY - jugador.posY) <= ANCHO * 3)
                      {
@@ -526,8 +526,8 @@ int main()
                            al_set_timer_count(tempGravedad, -20);
                            teclaSoltada = true;
                            parryFrames = 0;
-                           enemigosE[contEnemigos].posX = OUT_OF_BOUNDS;
-                           enemigosE[contEnemigos].posY = OUT_OF_BOUNDS;
+                           /*enemigosE[contEnemigos].posX = OUT_OF_BOUNDS;
+                           enemigosE[contEnemigos].posY = OUT_OF_BOUNDS;*/
                         }
                      }
                   }
@@ -555,6 +555,10 @@ int main()
                      {
                         al_draw_textf(font, al_map_rgb(255, 255, 255), jugador.posX, jugador.posY + 50, 0, "Transicionando...");
                         nivel++;
+                        for(contEnemigos = 0; contEnemigos < cantidadEnemigosC; contEnemigos++) // Destruye los timers de los enemigos C:
+                        {
+                           al_destroy_timer(enemigosC[contEnemigos].tempEnemigosC);
+                        }
                         cantidadEnemigosA = 0;
                         cantidadEnemigosC = 0;
                         cantidadEnemigosE = 0;
@@ -674,7 +678,7 @@ int main()
                {
                   drawEnemigosX = enemigosE[contEnemigos].posX - camaraX;
                   drawEnemigosY = enemigosE[contEnemigos].posY - camaraY;
-                  al_draw_filled_rectangle(drawEnemigosX, drawEnemigosY, drawEnemigosX + LARGO, drawEnemigosY + ANCHO, al_map_rgba_f(1, 0.2, 0.2, 0.2));
+                  al_draw_filled_rectangle(drawEnemigosX, drawEnemigosY, drawEnemigosX + LARGO, drawEnemigosY + ANCHO, al_map_rgba_f(1, 0.1, 0.1, 0.2));
                }
 
                if(mapa[i][j] == 'p') // Parry enemigo
@@ -705,7 +709,7 @@ int main()
          }
 
          al_draw_filled_rectangle(jugador.posX - camaraX, jugador.posY - camaraY, jugador.posX - camaraX + LARGO, jugador.posY - camaraY + ANCHO, al_map_rgb(255, 255, 0)); // Rectangulo de personaje.
-         al_draw_filled_rectangle(x - camaraX, y - camaraY, x - camaraX + LARGO, y - camaraY + ANCHO, al_map_rgb(207, 255, 163));
+         //al_draw_filled_rectangle(x - camaraX, y - camaraY, x - camaraX + LARGO, y - camaraY + ANCHO, al_map_rgb(207, 255, 163));
          //al_draw_bitmap(mysha, 100, 100, 0);
 
          // 3. Dibujar informacion de debug.
@@ -923,38 +927,33 @@ bool collideSuelo(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sue
    return false;
 }
 
-float anularMovimientoX(ALLEGRO_FONT* font, entidad entidad, _direccion direccion, float *sueloX) // Deshace el movimiento en el eje X al chocar
+float anularMovimientoX(ALLEGRO_FONT* font, entidad *entidad, _direccion direccion, float *sueloX) // Deshace el movimiento en el eje X al chocar
 {
-   float ajusteX;
-   ajusteX = entidad.posX;
-
    if(direccion.Izquierda == true)
    {
-      ajusteX = *sueloX + LARGO;
+      entidad->posX = *sueloX + LARGO;
    }
    if(direccion.Derecha == true)
    {
-      ajusteX = *sueloX - LARGO;
+      entidad->posX = *sueloX - LARGO;
    }
 
-   return ajusteX;
+   return entidad->posX;
 }
 
-float anularMovimientoY(ALLEGRO_FONT* font, entidad entidad, float *sueloY) // Deshace el movimiento en el eje Y al chocar
+float anularMovimientoY(ALLEGRO_FONT* font, entidad *entidad, float *sueloY) // Deshace el movimiento en el eje Y al chocar
 {
-   float ajusteY;
-   ajusteY = entidad.posY;
 
-   if(ajusteY+ANCHO>*sueloY)
+   if(entidad->posY+ANCHO>*sueloY)
    {
-      ajusteY = *sueloY - ANCHO;
+      entidad->posY = *sueloY - ANCHO;
    }
-   if(ajusteY<*sueloY+ANCHO)
+   if(entidad->posY<*sueloY+ANCHO)
    {
-      ajusteY = *sueloY - ANCHO;
+      entidad->posY = *sueloY - ANCHO;
    }
 
-   return ajusteY;
+   return entidad->posY;
 }
 
 void cargarMapa(VARIABLES_CARGARMAPA)
