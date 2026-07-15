@@ -13,7 +13,9 @@
        1. INICIALIZACIÓN DE ALLEGRO
        ------------------------------------------------------------ */
 
+#include <allegro5/altime.h>
 #include <allegro5/bitmap.h>
+#include <allegro5/events.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,8 +24,8 @@
 #include <allegro5/color.h> // El salto permite que cuando el jugador se caiga al fondo de la pantalla, pueda saltar de nuevo cuando valorTimerGravedad es 0.
 #include <allegro5/timer.h> // El parry no tiene cooldown.
 #include <allegro5/allegro_audio.h> // La funcion anularMovimientoY lleva al personaje al tope del bloque.
-#include <allegro5/allegro_acodec.h>
-#include <allegro5/allegro_font.h>
+#include <allegro5/allegro_acodec.h> // Se descoloca el cuadrado parry al moverse (puede ser por el scrolling con la camara)
+#include <allegro5/allegro_font.h> // No funcionan las colsiones con el jugador y los enemigos E.
 #include <allegro5/allegro_image.h>
 #include <allegro5/allegro_primitives.h> // Sigue: Interaccion con otros elementos (semiplataformas, enemigos, balas, corazones extra), pasar enemigos a un arreglo de estructura, implementar joystick
 
@@ -50,6 +52,9 @@
 
 #define PI 3.14159
 
+#define VARIABLES_CARGARMAPA char mapa[ANCHO_MAPA][LARGO_MAPA], int nivel, entidad *jugador, entidad enemigosA[MAX_ENEMIGOS], int *cantidadEnemigosA, entidad enemigosC[MAX_ENEMIGOS], int *cantidadEnemigosC, entidad enemigosE[MAX_ENEMIGOS], int *cantidadEnemigosE
+#define CARGADO_DE_MAPA mapa, nivel, &jugador, enemigosA, &cantidadEnemigosA, enemigosC, &cantidadEnemigosC, enemigosE, &cantidadEnemigosE
+
 typedef struct
 {
    float posX;
@@ -60,8 +65,24 @@ typedef struct
    int direccionMovimientoA;
    bool colisionEnemigoA;
    float puntoColisionA;
+   ALLEGRO_TIMER* tempEnemigosC;
+   float valorTimerEnemigosC;
+   float nodoCX;
+   float nodoCY;
+   float nodoE;
 }
 entidad;
+
+typedef struct // PASAR ENEMIGOS "A" A ESTA ESTRUCTURA
+{
+   float posX;
+   float posY;
+   int vida;
+   int direccionMovimientoA;
+   bool colisionEnemigoA;
+   float puntoColisionA;
+}
+enemigosA;
 
 typedef struct
 {
@@ -82,7 +103,7 @@ bool collideSuelo(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sue
 float anularMovimientoX(ALLEGRO_FONT* font, entidad entidad, _direccion direccion, float *sueloX);
 float anularMovimientoY(ALLEGRO_FONT* font, entidad entidad, float *sueloY);
 
-void cargarMapa(int mapa[ANCHO_MAPA][LARGO_MAPA], int nivel, entidad *jugador, entidad enemigos[MAX_ENEMIGOS], int *cantidadEnemigosA);
+void cargarMapa(VARIABLES_CARGARMAPA);
 
 float angulo(float x1, float x2, float y1, float y2);
 float distancia(float x1, float x2, float y1, float y2);
@@ -100,6 +121,8 @@ int main()
 
    ALLEGRO_TIMER* tempGravedad = al_create_timer(1.0 / TARGET_FPS); // Temporizador de gravedad.
    must_init(tempGravedad, "tempGravedad");
+   ALLEGRO_TIMER* tempEnemigosE = al_create_timer(1.0 / TARGET_FPS); // Temporizador de posicion de enemigos E.
+   must_init(tempEnemigosE, "tempEnemigosE");
 
    ALLEGRO_EVENT_QUEUE* queue = al_create_event_queue();
    must_init(queue, "queue");
@@ -135,8 +158,14 @@ int main()
    entidad jugador;
    jugador.vida = 99;
 
-   entidad enemigosA[MAX_ENEMIGOS];
+   entidad enemigosA[MAX_ENEMIGOS]; // Se declaran los arreglos de enemigos con sus cantidades.
    int cantidadEnemigosA = 0;
+   entidad enemigosC[MAX_ENEMIGOS];
+   int cantidadEnemigosC = 0;
+   float valorTimerEnemigosC; // Obtiene el valor del temporizador de posicion de enemigos C.
+   entidad enemigosE[MAX_ENEMIGOS];
+   int cantidadEnemigosE = 0;
+   float valorTimerEnemigosE; // Obtiene el valor del temporizador de posicion de enemigos E.
 
    int iFrames = 0;
    int parryFrames = 0;
@@ -163,20 +192,18 @@ int main()
    int i, j, contEnemigos; // Contadores generales reutilizables.
    float puntoX, puntoY; // Reciben los valores de i y j para traspasarlos a variables flotantes que puedan ser traspasadas a las funciones de colision.
 
-   FILE *contenidoMapa1; // Variables de obtencion de datos de "mapa1.txt".
-   int valorRecibido; 
    int nivel = 1; // Numero de nivel.
 
    float camaraX = 0; // Variables de camara
    float camaraY = 0;
-   float drawX, drawY, drawEnemigosX, drawEnemigosY; // Determinan la posicion en la pantalla para dibujar los objetos y enemigos.
+   float drawX, drawY, drawEnemigosX, drawEnemigosY; // Determinan la posicion en la pantalla para dibujar las entidades.
 
    bool flag = 0; // BANDERA DE PRUEBA
 
    // Inicializacion general
 
-   int mapa[ANCHO_MAPA][LARGO_MAPA];
-   cargarMapa(mapa, nivel, &jugador, enemigosA, &cantidadEnemigosA);
+   char mapa[ANCHO_MAPA][LARGO_MAPA];
+   cargarMapa(CARGADO_DE_MAPA);
 
    for(i = 0; i < cantidadEnemigosA; i++)
    {
@@ -184,26 +211,10 @@ int main()
       printf("Y_%d = %f\n", i, enemigosA[i].posY);
    }
 
-   /*for(i = 0; i < ANCHO_MAPA; i++)
-   {
-      for(j = 0; j < LARGO_MAPA; j++)
-      {
-         if(fscanf(contenidoMapa1, "%d", &valorRecibido) != EOF)
-         {
-            mapa[i][j] = valorRecibido;
-         }
-         else
-         {
-            break;
-         }
-      }
-      printf("\n");
-   }
-   printf("\n");*/
-
    ALLEGRO_KEYBOARD_STATE ks;
 
    al_start_timer(timer);
+   al_start_timer(tempEnemigosE);
 
    unsigned char key[ALLEGRO_KEY_MAX];
    memset(key, 0, sizeof(key));
@@ -279,10 +290,16 @@ int main()
       {
          al_clear_to_color(al_map_rgb(0, 0, 0));
 
-         // 1: Realizar los ajustes necesarios en el cuadrado personaje.
+         // 1: Realizar los ajustes necesarios en los objetos dinamicos.
+         // 1.1: Personaje:
 
          jugador.posParryX = jugador.posX - 20;
          jugador.posParryY = jugador.posY - 20;
+         for(contEnemigos = 0; contEnemigos < cantidadEnemigosC; contEnemigos++)
+         {
+            enemigosC[contEnemigos].valorTimerEnemigosC = al_get_timer_count(enemigosC[contEnemigos].tempEnemigosC);
+         }
+         valorTimerEnemigosE = al_get_timer_count(tempEnemigosE);
          valorTimerGravedad = al_get_timer_count(tempGravedad);
          if(valorTimerGravedad > 0)
          {
@@ -319,7 +336,7 @@ int main()
             {
                puntoX = j*LARGO;
                puntoY = i*ANCHO;
-               if(fabs(puntoX - jugador.posX) <= LARGO * 3 && fabs(puntoY - jugador.posY) <= ANCHO * 3 && (mapa[i][j] == 1 || (mapa[i][j] == 2 && jugador.posY <= puntoY && cayendo == true)))
+               if(fabs(puntoX - jugador.posX) <= LARGO * 3 && fabs(puntoY - jugador.posY) <= ANCHO * 3 && (mapa[i][j] == '#' || (mapa[i][j] == '=' && jugador.posY <= puntoY && cayendo == true)))
                {
                   if(jugadorEnAire == true && collideSuelo(font, jugador, &puntoX, &puntoY) == true)
                   {
@@ -345,6 +362,8 @@ int main()
             al_draw_filled_rectangle(jugador.posParryX - camaraX, jugador.posParryY - camaraY, jugador.posParryX - camaraX + LARGO * 2, jugador.posParryY - camaraY + ANCHO * 2, al_map_rgb(100, 0, 100));
          }
 
+         // 1.2: Enemigos:
+
          for(contEnemigos = 0; contEnemigos < cantidadEnemigosA; contEnemigos++) // Movimiento de los enemigos A.
          {
             if(enemigosA[contEnemigos].colisionEnemigoA == true) // Si chocan:
@@ -362,13 +381,13 @@ int main()
             }
             enemigosA[contEnemigos].posX += enemigosA[contEnemigos].direccionMovimientoA; // Desplaza al enemigo correspondiente.
          }
-         
+
          for(contEnemigos = 0; contEnemigos < cantidadEnemigosA; contEnemigos++)  // Revisa las colisiones en los enemigos A.
          {
             int fila = enemigosA[contEnemigos].posY / ANCHO;
             for(j = 0; j < LARGO_MAPA; j++)
             {
-               if(mapa[fila][j] == 1)
+               if(mapa[fila][j] == '#')
                {
                   puntoX = j*LARGO;
                   if(enemigosA[contEnemigos].posX + LARGO > puntoX && puntoX + LARGO > enemigosA[contEnemigos].posX)
@@ -400,6 +419,25 @@ int main()
                }
             }
          }*/
+         for(contEnemigos = 0; contEnemigos < cantidadEnemigosC; contEnemigos++)  // Movimiento de los enemigos C.
+         {
+            if(fabs(enemigosC[contEnemigos].posX - jugador.posX) <= (float)(LARGO_PANTALLA) / 2)
+            {
+               al_start_timer(enemigosC[contEnemigos].tempEnemigosC); // Inicia el timer de posicion de enemigos C.
+            }
+            if(al_get_timer_started(enemigosC[contEnemigos].tempEnemigosC) == true)
+            {
+               enemigosC[contEnemigos].valorTimerEnemigosC = al_get_timer_count(enemigosC[contEnemigos].tempEnemigosC);
+               enemigosC[contEnemigos].posX = enemigosC[contEnemigos].nodoCX + 100 * sinf(enemigosC[contEnemigos].valorTimerEnemigosC / 25);
+               enemigosC[contEnemigos].posY = enemigosC[contEnemigos].nodoCY + 25 * cosf(enemigosC[contEnemigos].valorTimerEnemigosC / 25) * cosf(enemigosC[contEnemigos].valorTimerEnemigosC / 25);
+               enemigosC[contEnemigos].nodoCY += 1;
+            }
+         }
+
+         for(contEnemigos = 0; contEnemigos < cantidadEnemigosE; contEnemigos++)  // Movimiento de los enemigos E.
+         {
+            enemigosE[contEnemigos].posY = enemigosE[contEnemigos].nodoE + 150 * sinf(valorTimerEnemigosE / 10);
+         }
 
          for(i = 0; i < ANCHO_MAPA; i++) // Revisa las colisiones en cada bloque. (REVISAR LAS COLISIONES CON LOS ENEMIGOS DINAMICOS RESTANTES)
          {
@@ -409,7 +447,7 @@ int main()
                puntoY = i*ANCHO;
                if(fabs(puntoX - jugador.posX) <= LARGO * 3 && fabs(puntoY - jugador.posY) <= ANCHO * 3) // Revisa solo si la distancia entre el bloque dado y el personaje es menor o igual a cierto rango.
                {
-                  if(mapa[i][j] == 1) // Colision personaje-suelo/pared:
+                  if(mapa[i][j] == '#') // Colision personaje-suelo/pared:
                   {
                      if(collide(font, jugador, &puntoX, &puntoY) == true)
                      {
@@ -426,11 +464,23 @@ int main()
                         }
                      }
                   }
-                  if(mapa[i][j] == 2) // Colision personaje-semiplataforma:
+                  if(mapa[i][j] == '=') // Colision personaje-semiplataforma:
                   {
                      if(collide(font, jugador, &puntoX, &puntoY) == true && jugador.posY <= puntoY && cayendo == true) // Deben chocar, el personaje debe estar mas alto que la plataforma, y el personaje debe estar cayendo estrictamente para abajo.
                      {
                         jugador.posY = anularMovimientoY(font, jugador, &puntoY);
+                     }
+                  }
+                  if(mapa[i][j] == '/') // Colision personaje-pincho:
+                  {
+                     if(collide(font, jugador, &puntoX, &puntoY) == true)
+                     {
+                        al_set_timer_count(tempGravedad, -30);
+                        if(iFrames == 0)
+                        {
+                           jugador.vida--; // Resta 1 punto de vida.
+                           iFrames = INVINCIBILITY_FRAMES; // Otorga 120 frames de invencibilidad.
+                        }
                      }
                   }
                   for(contEnemigos = 0; contEnemigos < cantidadEnemigosA; contEnemigos++) // Colision personaje-enemigo A:
@@ -444,15 +494,44 @@ int main()
                         }
                      }
                   }
-                  /*if(mapa[i][j] == 3) // Colision personaje-enemigo:
+                  for(contEnemigos = 0; contEnemigos < cantidadEnemigosC; contEnemigos++) // Colision personaje-enemigo C:
                   {
-                     if(collide(font, jugador, &puntoX, &puntoY) == true && iFrames == 0)
+                     if(fabs(enemigosC[contEnemigos].posX - jugador.posX) <= LARGO * 3 && fabs(enemigosC[contEnemigos].posY - jugador.posY) <= ANCHO * 3)
                      {
-                        jugador.vida--; // Resta 1 punto de vida.
-                        iFrames = INVINCIBILITY_FRAMES; // Otorga 120 frames de invencibilidad.
+                        if(collide(font, jugador, &enemigosC[contEnemigos].posX, &enemigosC[contEnemigos].posY) == true && iFrames == 0)
+                        {
+                           jugador.vida--; // Resta 1 punto de vida.
+                           iFrames = INVINCIBILITY_FRAMES; // Otorga 120 frames de invencibilidad.
+                        }
                      }
-                  }*/
-                  if(mapa[i][j] == 4 && direccion.Arriba == true) // Colision parry propio-objeto parriable:
+                  }
+                  for(contEnemigos = 0; contEnemigos < cantidadEnemigosC; contEnemigos++) // Colision personaje-enemigo E:
+                  {
+                     if(fabs(enemigosE[contEnemigos].posX - jugador.posX) <= LARGO * 3 && fabs(enemigosE[contEnemigos].posY - jugador.posY) <= ANCHO * 3)
+                     {
+                        if(collide(font, jugador, &enemigosE[contEnemigos].posX, &enemigosE[contEnemigos].posY) == true && iFrames == 0)
+                        {
+                           jugador.vida--; // Resta 1 punto de vida.
+                           iFrames = INVINCIBILITY_FRAMES; // Otorga 120 frames de invencibilidad.
+                        }
+                     }
+                  }
+                  for(contEnemigos = 0; contEnemigos < cantidadEnemigosE; contEnemigos++) // Colision parry propio-enemigo E:
+                  {
+                     if(fabs(enemigosE[contEnemigos].posX - jugador.posX) <= LARGO * 3 && fabs(enemigosE[contEnemigos].posY - jugador.posY) <= ANCHO * 3)
+                     {
+                        if(collideParry(font, jugador, &enemigosE[contEnemigos].posX, &enemigosE[contEnemigos].posY) == true && parryFrames > 0)
+                        {
+                           al_rest(0.1);
+                           al_set_timer_count(tempGravedad, -20);
+                           teclaSoltada = true;
+                           parryFrames = 0;
+                           enemigosE[contEnemigos].posX = OUT_OF_BOUNDS;
+                           enemigosE[contEnemigos].posY = OUT_OF_BOUNDS;
+                        }
+                     }
+                  }
+                  if(mapa[i][j] == 'p') // Colision parry propio-objeto parriable:
                   {
                      if(collideParry(font, jugador, &puntoX, &puntoY) == true && parryFrames > 0) // Si se efectua un parry correctamente:
                      {
@@ -462,7 +541,7 @@ int main()
                         parryFrames = 0;
                      }
                   }
-                  if(mapa[i][j] == 5) // Colision personaje-corazon:
+                  if(mapa[i][j] == 'H') // Colision personaje-corazon:
                   {
                      if(collide(font, jugador, &puntoX, &puntoY) == true && healCD == 0)
                      {
@@ -470,26 +549,17 @@ int main()
                         healCD = INVINCIBILITY_FRAMES;
                      }
                   }
-                  if(mapa[i][j] == 6) // Colision personaje-pincho:
-                  {
-                     if(collide(font, jugador, &puntoX, &puntoY) == true)
-                     {
-                        al_set_timer_count(tempGravedad, -30);
-                        if(iFrames == 0)
-                        {
-                           jugador.vida--; // Resta 1 punto de vida.
-                           iFrames = INVINCIBILITY_FRAMES; // Otorga 120 frames de invencibilidad.
-                        }
-                     }
-                  }
-                  if(mapa[i][j] == 8) // Colision personaje-portal
+                  if(mapa[i][j] == '@') // Colision personaje-portal
                   {
                      if(collideParry(font, jugador, &puntoX, &puntoY) == true && direccion.Arriba == true) // Utiliza el cuadrado parry para facilitar la entrada al portal.
                      {
                         al_draw_textf(font, al_map_rgb(255, 255, 255), jugador.posX, jugador.posY + 50, 0, "Transicionando...");
                         nivel++;
+                        cantidadEnemigosA = 0;
+                        cantidadEnemigosC = 0;
+                        cantidadEnemigosE = 0;
                         al_rest(1);
-                        cargarMapa(mapa, nivel, &jugador, enemigosA, &cantidadEnemigosA);
+                        cargarMapa(CARGADO_DE_MAPA);
                      }
                   }
                }
@@ -550,10 +620,10 @@ int main()
          {
             camaraX = 0;
          }
-         /*if(camaraY < 0)
+         if(camaraY < 0)
          {
             camaraY = 0;
-         }*/
+         }
          if(camaraX > LARGO_MAPA * LARGO - LARGO_PANTALLA)
          {
             camaraX = LARGO_MAPA * LARGO - LARGO_PANTALLA;
@@ -571,53 +641,63 @@ int main()
             {
                drawX = j*LARGO - camaraX;
                drawY = i*ANCHO - camaraY;
-               if(mapa[i][j] == 1) // Suelo
+               if(mapa[i][j] == '#') // Suelo
                {
                   //al_draw_textf(font, al_map_rgb(255, 255, 255), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]); // Dibuja la posicion en la matriz del cuadrado suelo en pantalla.
                   al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(0, 0, 0.5, 0.2)); // Dibuja el cuadrado suelo.
                }
-               if(mapa[i][j] == 2) // Plataforma atravesable
+               if(mapa[i][j] == '=') // Plataforma atravesable
                {
                   //al_draw_textf(font, al_map_rgb(255, 255, 255), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
                   al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(0, 0.8, 0.8, 0.2));
                }
-               for(contEnemigos = 0; contEnemigos < cantidadEnemigosA; contEnemigos++)
-               {
-                  drawEnemigosX = enemigosA[contEnemigos].posX - camaraX;
-                  drawEnemigosY = enemigosA[contEnemigos].posY - camaraY;
-                  al_draw_filled_rectangle(drawEnemigosX, drawEnemigosY, drawEnemigosX + LARGO, drawEnemigosY + ANCHO, al_map_rgba_f(0.8, 0, 0, 0.2));
-               }
-               /*if(mapa[i][j] == 3) // Enemigo (obstaculo)
-               {
-                  //al_draw_textf(font, al_map_rgb(255, 255, 255), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
-                  al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(0.8, 0, 0, 0.2));
-               }*/
-               if(mapa[i][j] == 4) // Parry enemigo
-               {
-                  //al_draw_textf(font, al_map_rgb(255, 255, 255), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
-                  al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(1, 0.5, 0.6, 0.2));
-               }
-               if(mapa[i][j] == 5) // Corazon
-               {
-                  //al_draw_textf(font, al_map_rgb(255, 255, 255), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
-                  al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(0, 0.6, 0, 0.2));
-               }
-               if(mapa[i][j] == 6) // Pincho
+               if(mapa[i][j] == '/') // Obstaculo
                {
                   //al_draw_textf(font, al_map_rgb(255, 255, 255), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
                   al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(0.5, 0, 0, 0.2));
                }
-               if(mapa[i][j] == 8) // Portal
+
+               for(contEnemigos = 0; contEnemigos < cantidadEnemigosA; contEnemigos++) // Enemigos A
+               {
+                  //if(enemigo != OUT_OF_BOUNDS)
+                  drawEnemigosX = enemigosA[contEnemigos].posX - camaraX;
+                  drawEnemigosY = enemigosA[contEnemigos].posY - camaraY;
+                  al_draw_filled_rectangle(drawEnemigosX, drawEnemigosY, drawEnemigosX + LARGO, drawEnemigosY + ANCHO, al_map_rgba_f(0.8, 0, 0, 0.2));
+               }
+               for(contEnemigos = 0; contEnemigos < cantidadEnemigosC; contEnemigos++) // Enemigos C
+               {
+                  drawEnemigosX = enemigosC[contEnemigos].posX - camaraX;
+                  drawEnemigosY = enemigosC[contEnemigos].posY - camaraY;
+                  al_draw_filled_rectangle(drawEnemigosX, drawEnemigosY, drawEnemigosX + LARGO, drawEnemigosY + ANCHO, al_map_rgba_f(1, 0.2, 0.2, 0.2));
+               }
+               for(contEnemigos = 0; contEnemigos < cantidadEnemigosE; contEnemigos++) // Enemigos E
+               {
+                  drawEnemigosX = enemigosE[contEnemigos].posX - camaraX;
+                  drawEnemigosY = enemigosE[contEnemigos].posY - camaraY;
+                  al_draw_filled_rectangle(drawEnemigosX, drawEnemigosY, drawEnemigosX + LARGO, drawEnemigosY + ANCHO, al_map_rgba_f(1, 0.2, 0.2, 0.2));
+               }
+
+               if(mapa[i][j] == 'p') // Parry enemigo
+               {
+                  //al_draw_textf(font, al_map_rgb(255, 255, 255), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
+                  al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(1, 0.5, 0.6, 0.2));
+               }
+               if(mapa[i][j] == 'H') // Corazon
+               {
+                  //al_draw_textf(font, al_map_rgb(255, 255, 255), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
+                  al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(0, 0.4, 0, 0.2));
+               }
+               if(mapa[i][j] == '@') // Portal
                {
                   //al_draw_textf(font, al_map_rgb(255, 255, 255), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
                   al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(1, 0.5, 0, 0.2));
                }
-               if(mapa[i][j] == 9) // Punto de inicio
+               if(mapa[i][j] == 'i') // Punto de inicio
                {
                   al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(1, 1, 1, 0.2));
                   //al_draw_textf(font, al_map_rgb(0, 0, 0), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
                }
-               if(mapa[i][j] == 0) // Vacio
+               if(mapa[i][j] == '.') // Vacio
                {
                   //al_draw_textf(font, al_map_rgb(50, 50, 50), j*LARGO, i*ANCHO, 0, "%d", mapa[i][j]);
                }
@@ -671,7 +751,7 @@ int main()
             {
                puntoX = j*LARGO;
                puntoY = i*ANCHO;
-               if(mapa[i][j] == 1)
+               if(mapa[i][j] == '#')
                {
                   if(collideSuelo(font, jugador, &puntoX, &puntoY) == true)
                   {          
@@ -727,6 +807,10 @@ int main()
    al_destroy_display(disp);
    al_destroy_timer(timer);
    al_destroy_timer(tempGravedad);
+   for(contEnemigos = 0; contEnemigos < cantidadEnemigosC; contEnemigos++)
+   {
+      al_destroy_timer(enemigosC[contEnemigos].tempEnemigosC);
+   }
    al_destroy_event_queue(queue);
 
    return 0;
@@ -873,11 +957,12 @@ float anularMovimientoY(ALLEGRO_FONT* font, entidad entidad, float *sueloY) // D
    return ajusteY;
 }
 
-void cargarMapa(int mapa[ANCHO_MAPA][LARGO_MAPA], int nivel, entidad *jugador, entidad enemigosA[5], int *cantidadEnemigosA)
+void cargarMapa(VARIABLES_CARGARMAPA)
 //void cargarMapa(char *ruta_archivo, entidad jugador)
 {
    FILE *contenidoMapa;
-   int i, j, valorRecibido;
+   int i, j; 
+   char valorRecibido;
 
    /*sacar la lectura del archivo y carga de mapa a una funcion, psar como parametros mapa y jugador*/
 
@@ -906,10 +991,10 @@ void cargarMapa(int mapa[ANCHO_MAPA][LARGO_MAPA], int nivel, entidad *jugador, e
    {
       for(j = 0; j < LARGO_MAPA; j++)
       {
-         if(fscanf(contenidoMapa, "%d", &valorRecibido) != EOF)
+         if(fscanf(contenidoMapa, " %c", &valorRecibido) != EOF)
          {
             mapa[i][j] = valorRecibido;
-            if(valorRecibido == 3) // Define los puntos de inicio de los enemigos
+            if(valorRecibido == 'A') // Define las variables miembro de las casillas del arreglo de enemigos
             {
                if(*cantidadEnemigosA < MAX_ENEMIGOS)
                {
@@ -919,15 +1004,46 @@ void cargarMapa(int mapa[ANCHO_MAPA][LARGO_MAPA], int nivel, entidad *jugador, e
                   enemigosA[*cantidadEnemigosA].posY = i*ANCHO;
                   enemigosA[*cantidadEnemigosA].vida = VIDA_ENEMIGO_A;
                   enemigosA[*cantidadEnemigosA].direccionMovimientoA = -VELOCIDAD_ENEMIGO_A;
-                  enemigosA[*cantidadEnemigosA].colisionEnemigoA = false;
+                  enemigosA[*cantidadEnemigosA].colisionEnemigoA = false; // No es necesario inicializar puntoColisionA.
                   (*cantidadEnemigosA)++;
                }
                else
                {
-                  printf("Advertencia: Hay mas enemigos que los que soporta el arreglo\n");
+                  printf("Advertencia: Hay mas enemigos A que los que soporta el arreglo\n");
                }
             }
-            if(valorRecibido == 9) // Define el punto de inicio del jugador en el caso del cargado de una casilla 9
+            if(valorRecibido == 'C')
+            {
+               if(*cantidadEnemigosC < MAX_ENEMIGOS)
+               {
+                  enemigosC[*cantidadEnemigosC].posX = j*LARGO;
+                  enemigosC[*cantidadEnemigosC].posY = i*ANCHO;
+                  enemigosC[*cantidadEnemigosC].nodoCY = enemigosC[*cantidadEnemigosC].posY - 80;
+                  enemigosC[*cantidadEnemigosC].nodoCX = enemigosC[*cantidadEnemigosC].posX;
+                  enemigosC[*cantidadEnemigosC].tempEnemigosC = al_create_timer(1.0 / TARGET_FPS); // Temporizador de posicion de enemigos C.
+                  must_init(enemigosC[*cantidadEnemigosC].tempEnemigosC, "tempEnemigosC");
+                  (*cantidadEnemigosC)++;
+               }
+               else
+               {
+                  printf("Advertencia: Hay mas enemigos C que los que soporta el arreglo\n");
+               }
+            }
+            if(valorRecibido == 'E')
+            {
+               if(*cantidadEnemigosE < MAX_ENEMIGOS)
+               {
+                  enemigosE[*cantidadEnemigosE].posX = j*LARGO;
+                  enemigosE[*cantidadEnemigosE].posY = i*ANCHO;
+                  enemigosE[*cantidadEnemigosE].nodoE = enemigosE[*cantidadEnemigosE].posY;
+                  (*cantidadEnemigosE)++;
+               }
+               else
+               {
+                  printf("Advertencia: Hay mas enemigos E que los que soporta el arreglo\n");
+               }
+            }
+            if(valorRecibido == 'i') // Define el punto de inicio del jugador en el caso del cargado de una casilla 'i'
             {
                jugador->posX = j*LARGO;
                jugador->posY = i*ANCHO;
@@ -939,17 +1055,7 @@ void cargarMapa(int mapa[ANCHO_MAPA][LARGO_MAPA], int nivel, entidad *jugador, e
          }
       }
    }
-/*
-   for(i = 0; i < ANCHO_MAPA; i++)
-   {
-      for(j = 0; j < LARGO_MAPA; j++)
-      {
-         printf("%d  ", mapa[i][j]);
-      }
-      printf("\n");
-   }
-   printf("dos\n");
-*/
+
    fclose(contenidoMapa);
 
    return;
