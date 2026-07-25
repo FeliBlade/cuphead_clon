@@ -13,8 +13,8 @@
        1. INICIALIZACIÓN DE ALLEGRO
        ------------------------------------------------------------ */
 
-#include <allegro5/altime.h> // hacer arreglo de portales 'o', de componentes 0 y 1 por si han sido usados.
-#include <allegro5/bitmap.h>
+#include <allegro5/altime.h> // de inmediato sigue sprites de enemigo muerto (explosion) y de moneda y moneda recogida
+#include <allegro5/bitmap.h> // hacer que se muestre un sprite de secreto encima de pasto en zonas de secreto
 #include <allegro5/bitmap_draw.h>
 #include <allegro5/events.h>
 #include <stdbool.h>
@@ -48,22 +48,28 @@
 
 #define MAX_ENEMIGOS 100
 #define MAX_BALAS 50
-#define VELOCIDAD_BALA 4
-#define LARGO_BALA 10
+#define VELOCIDAD_BALA 18
+#define LARGO_BALA 6
 #define ANCHO_BALA 6
-#define COOLDOWN_DISPARO 15 // frames entre disparos
+#define DANHO_BALA 5
+#define VARIACION_ALTURA_BALA 10
+#define COOLDOWN_DISPARO 10
 
-#define VIDA_ENEMIGO_A 20
+#define VIDA_ENEMIGO_A 10
 #define VELOCIDAD_ENEMIGO_A 4
 
-#define HORIZONTAL_OSCILLATION_RANGE_C 100
+#define VIDA_ENEMIGO_C 5
+#define HORIZONTAL_OSCILLATION_RANGE_C 75
 #define VERTICAL_OSCILLATION_RANGE_C 25
 #define OSCILLATION_SPEED_C 25
-#define FALLING_SPEED_C 2
+#define FALLING_SPEED_C 1.5
 
 #define OSCILLATION_RANGE_E 150
 #define OSCILLATION_SPEED_E 25
 
+#define MAX_MONEDAS 5
+
+#define REGRESO_DE_PORTAL -200
 #define OUT_OF_BOUNDS -100
 
 #define LARGO_BLOQUE 40
@@ -92,43 +98,8 @@
 #define OFFSET_CORRIENDO_Y 48
 #define PI 3.14159
 
-#define VARIABLES_CARGARMAPA char mapa[ANCHO_MAPA][LARGO_MAPA], int nivel, entidad *jugador, entidad enemigosA[MAX_ENEMIGOS], int *cantidadEnemigosA, entidad enemigosC[MAX_ENEMIGOS], int *cantidadEnemigosC, entidad enemigosE[MAX_ENEMIGOS], int *cantidadEnemigosE
-#define CARGADO_DE_MAPA mapa, nivel, &jugador, enemigosA, &cantidadEnemigosA, enemigosC, &cantidadEnemigosC, enemigosE, &cantidadEnemigosE
-
-typedef struct
-{
-   float posX;
-   float posY;
-   int direccion;
-   bool activa;
-}
-bala;
-
-typedef struct
-{
-   float posX;
-   float posY;
-   float posParryX;
-   float posParryY;
-   int vida;
-   bala balas[MAX_BALAS];
-   int disparoCD;
-   int orientacion;
-   int frameQuieto;
-   int frameCorriendo;
-   int direccionMovimientoA;
-   bool colisionEnemigoA;
-   float puntoColisionA;
-   int frameA;
-   int cicladoFramesA;
-   int contadorSaltitoA;
-   ALLEGRO_TIMER* tempEnemigosC;
-   float valorTimerEnemigosC;
-   float nodoCX;
-   float nodoCY;
-   float nodoE;
-}
-entidad;
+#define VARIABLES_CARGARMAPA char mapa[ANCHO_MAPA][LARGO_MAPA], entidad monedasMapa[MAX_MONEDAS], int *cantidadMonedas, portal *portalSalida, int nivel, entidad *jugador, entidad enemigosA[MAX_ENEMIGOS], int *cantidadEnemigosA, entidad enemigosC[MAX_ENEMIGOS], int *cantidadEnemigosC, entidad enemigosE[MAX_ENEMIGOS], int *cantidadEnemigosE
+#define CARGADO_DE_MAPA mapa, monedasMapa, &cantidadMonedas, &portalSalida, nivel, &jugador, enemigosA, &cantidadEnemigosA, enemigosC, &cantidadEnemigosC, enemigosE, &cantidadEnemigosE
 
 typedef struct
 {
@@ -136,20 +107,76 @@ typedef struct
    bool Abajo;
    bool Izquierda;
    bool Derecha;
+   bool Espacio;
    bool X;
 }
-_direccion;
+entrada;
+
+typedef struct
+{
+   float posX;
+   float posY;
+   entrada direccion;
+   bool activa;
+}
+bala;
+
+typedef struct
+{
+   float posX; // Generales
+   float posY;
+   int vida;
+
+   float posParryX; // Exclusivos al jugador
+   float posParryY;
+   entrada direccion;
+   int monedas;
+   bala balas[MAX_BALAS];
+   float variacionAlturaBala;
+   int direccionVariacionBala;
+   int disparoCD;
+   int orientacion;
+   int frameQuieto;
+   int frameCorriendo;
+
+   bool activo; // Interruptor que decide si el enemigo o la moneda esta activa o no.
+
+   int direccionMovimientoA; // Exclusivos a los enemigos
+   bool colisionEnemigoA;
+   float puntoColisionA;
+   int frameA;
+   int cicladoFramesA;
+   int contadorSaltitoA;
+
+   ALLEGRO_TIMER* tempEnemigosC;
+   float valorTimerEnemigosC;
+   float nodoCX;
+   float nodoCY;
+
+   float nodoE;
+}
+entidad;
+
+typedef struct
+{
+   float posX;
+   float posY;
+   bool activo;
+}
+portal;
 
 typedef struct
 {
    ALLEGRO_BITMAP* _sheet;
 
    ALLEGRO_BITMAP* tierra;
+   ALLEGRO_BITMAP* tierra_fondo;
    ALLEGRO_BITMAP* pasto;
    ALLEGRO_BITMAP* semiplataforma;
    ALLEGRO_BITMAP* enredadera;
    ALLEGRO_BITMAP* flor;
    ALLEGRO_BITMAP* puerta;
+   ALLEGRO_BITMAP* portal_local;
 
    ALLEGRO_BITMAP* enemigoA[FRAMES_ENEMIGO_A];
    ALLEGRO_BITMAP* enemigoC;
@@ -169,10 +196,12 @@ void must_init(bool test, const char *description);
 
 bool generalCollide(float x1, float y1, float largo1, float ancho1, float x2, float y2, float largo2, float ancho2);
 bool collide(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY);
+bool collideAnticipado(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY);
 bool collideParry(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY);
 bool collideSuelo(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY);
-float anularMovimientoX(ALLEGRO_FONT* font, entidad *entidad, float posXAnterior, float *sueloX);
-float anularMovimientoY(ALLEGRO_FONT* font, entidad *entidad, float posYAnterior, float *sueloY, ALLEGRO_TIMER* tempGravedad);
+float anularMovimientoX(entidad *entidad, float posXAnterior, float *sueloX);
+float anularMovimientoY(entidad *entidad, float posYAnterior, float *sueloY, ALLEGRO_TIMER* tempGravedad);
+bool balaDiagonal(entidad jugador, int numeroBala);
 
 void cargarMapa(VARIABLES_CARGARMAPA);
 ALLEGRO_BITMAP* sprite_grab(int x, int y, int largo, int ancho);
@@ -235,6 +264,15 @@ int main()
    entidad jugador;
    jugador.orientacion = 1;
    jugador.vida = 99;
+   jugador.variacionAlturaBala = 0;
+   jugador.direccionVariacionBala = VARIACION_ALTURA_BALA;
+   jugador.direccion.Arriba = false;
+   jugador.direccion.Abajo = false;
+   jugador.direccion.Izquierda = false;
+   jugador.direccion.Derecha = false;
+   jugador.direccion.Espacio = false;
+   jugador.direccion.X = false;
+   jugador.monedas = 0;
    jugador.frameQuieto = 0;
    jugador.frameCorriendo = 0;
 
@@ -247,17 +285,13 @@ int main()
    int cantidadEnemigosE = 0;
    float valorTimerEnemigosE; // Obtiene el valor del temporizador de posicion de enemigos E.
 
+   entidad monedasMapa[MAX_MONEDAS];
+   int cantidadMonedas = 0;
+
    int iFrames = 0;
    int dashFrames = 0;
    int parryFrames = 0;
    int healCD = 0;
-
-   _direccion direccion; // Estructura que registra la direccion de colision con paredes.
-   direccion.Arriba = false;
-   direccion.Abajo = false;
-   direccion.Izquierda = false;
-   direccion.Derecha = false;
-   direccion.X = false;
 
    int x = 480;
    int y = 480;
@@ -269,7 +303,7 @@ int main()
    bool cayendo = true; // Bandera que permite o denega el choque con semiplataformas.
    bool primeraVezSalto = false; // explicar luego
 
-   bool primeraVezDash = false;
+   bool primeraVezDash = false; // Evita que se pueda hacer dash hasta que se toque el piso de nuevo.
 
    bool teclaSoltada = false; // Se activa cuando la tecla es soltada en el aire.
    bool puedeHacerParry = true; // Forma parte de las condiciones para hacer parry.
@@ -277,25 +311,27 @@ int main()
    int i, j, cont, contEnemigos; // Contadores generales reutilizables.
    float puntoX, puntoY; // Reciben los valores de i y j para traspasarlos a variables flotantes que puedan ser traspasadas a las funciones de colision.
 
-   int nivel = 1; // Numero de nivel.
+   int nivel = 3; // Numero de nivel.
+   portal portalSalida; // Sostiene la posicion del portal de salida.
+
+   float desplazamientoBala; // Desplaza la bala, se reduce si el disparo es diagonal.
 
    float camaraX = 0; // Variables de camara.
    float camaraY = 0;
    float drawX, drawY, drawEnemigosX, drawEnemigosY; // Con camara(x, y), determinan la posicion en la pantalla para dibujar las entidades.
 
+   float transparenciaBloque = 1; // Determina la transparencia del bloque de secreto.
+   bool atravesando = false; // Bandera de atravieso de bloques de secreto.
+
+   char mapa[ANCHO_MAPA][LARGO_MAPA];
+   bool columnaEnredaderas = false;
    bool flag = 0; // BANDERA DE PRUEBA
 
    // Inicializacion general
 
-   char mapa[ANCHO_MAPA][LARGO_MAPA];
    cargarMapa(CARGADO_DE_MAPA);
 
-   for(i = 0; i < cantidadEnemigosA; i++)
-   {
-      printf("X_%d = %f\n", i, enemigosA[i].posX);
-      printf("Y_%d = %f\n", i, enemigosA[i].posY);
-   }
-   for(int i = 0; i < MAX_BALAS; i++)
+   for(i = 0; i < MAX_BALAS; i++)
    {
       jugador.balas[i].activa = false;
    }
@@ -319,6 +355,42 @@ int main()
          {
             if(key[ALLEGRO_KEY_UP])
             {
+               jugador.direccion.Arriba = true;
+            }
+            else
+            {
+               jugador.direccion.Arriba = false;
+            }
+            if(key[ALLEGRO_KEY_DOWN])
+            {
+               jugador.direccion.Abajo = true;
+            }
+            else
+            {
+               jugador.direccion.Abajo = false;
+            }
+            if(key[ALLEGRO_KEY_LEFT])
+            {
+               jugador.posX = jugador.posX - SPEED_FACTOR;
+               jugador.orientacion = -1;
+               jugador.direccion.Izquierda = true;
+            }
+            else
+            {
+               jugador.direccion.Izquierda = false;
+            }
+            if(key[ALLEGRO_KEY_RIGHT])
+            {
+               jugador.posX = jugador.posX + SPEED_FACTOR;
+               jugador.orientacion = 1;
+               jugador.direccion.Derecha = true;
+            }
+            else
+            {
+               jugador.direccion.Derecha = false;
+            }
+            if(key[ALLEGRO_KEY_SPACE])
+            {
                if(valorTimerGravedad == 0 && primeraVezSalto == false)
                {
                   al_set_timer_count(tempGravedad, -20);
@@ -330,27 +402,15 @@ int main()
                }
                jugadorEnAire = true;
                teclaSoltada = false;
-               direccion.Arriba = true;
+               jugador.direccion.Espacio = true;
             }
-            else if(jugadorEnAire == true)
+            else
             {
-               teclaSoltada = true;
-            }
-            if(key[ALLEGRO_KEY_DOWN])
-            {
-               direccion.Abajo = true;
-            }
-            if(key[ALLEGRO_KEY_LEFT])
-            {
-               jugador.posX = jugador.posX - SPEED_FACTOR;
-               jugador.orientacion = -1;
-               direccion.Izquierda = true;
-            }
-            if(key[ALLEGRO_KEY_RIGHT])
-            {
-               jugador.posX = jugador.posX + SPEED_FACTOR;
-               jugador.orientacion = 1;
-               direccion.Derecha = true;
+               if(jugadorEnAire == true)
+               {
+                  teclaSoltada = true;
+               }
+               jugador.direccion.Espacio = false;
             }
          }
          if(key[ALLEGRO_KEY_Z])
@@ -362,23 +422,55 @@ int main()
                   if(jugador.balas[i].activa == false)
                   {
                      jugador.balas[i].posX = jugador.posX;
-                     jugador.balas[i].posY = jugador.posY;
-                     jugador.balas[i].direccion = jugador.orientacion;
+                     jugador.balas[i].posY = jugador.posY + jugador.variacionAlturaBala;
+                     if(jugador.orientacion == -1) // Determina la direccion de movimiento de la bala, la cual solo cambia cuando esta se sale de la pantalla.
+                     {
+                        jugador.balas[i].direccion.Izquierda = true;
+                     }
+                     else if(jugador.orientacion == 1)
+                     {
+                        jugador.balas[i].direccion.Derecha = true;
+                     }
+                     if(jugador.direccion.Arriba == true)
+                     {
+                        jugador.balas[i].direccion.Arriba = true;
+                     }
+                     else if(jugador.direccion.Abajo == true)
+                     {
+                        jugador.balas[i].direccion.Abajo = true;
+                     }
+                     if(jugador.direccion.Izquierda == false && jugador.direccion.Derecha == false) // Deshabilita las direcciones laterales si esta disparando directo hacia arriba.
+                     {
+                        if(jugador.direccion.Arriba == true || jugador.direccion.Abajo == true)
+                        {
+                           jugador.balas[i].direccion.Izquierda = false;
+                           jugador.balas[i].direccion.Derecha = false;
+                        }
+                     }
                      jugador.balas[i].activa = true;
                      jugador.disparoCD = COOLDOWN_DISPARO;
                      break;
                   }
                }
+               if(jugador.variacionAlturaBala == VARIACION_ALTURA_BALA || jugador.variacionAlturaBala == -VARIACION_ALTURA_BALA)
+               {
+                  jugador.direccionVariacionBala *= -1;
+               }
+               jugador.variacionAlturaBala += jugador.direccionVariacionBala;
             }
          }
          if(key[ALLEGRO_KEY_X])
          {
-            if(primeraVezDash == false && direccion.X == false)
+            if(primeraVezDash == false && jugador.direccion.X == false)
             {
                dashFrames = DASH_FRAMES;
                primeraVezDash = true;
             }
-            direccion.X = true;
+            jugador.direccion.X = true;
+         }
+         else
+         {
+            jugador.direccion.X = false;
          }
          if(key[ALLEGRO_KEY_ESCAPE])
          {
@@ -507,25 +599,100 @@ int main()
 
          for(i = 0; i < MAX_BALAS; i++)
          {
-            if(jugador.balas[i].activa == true) // Despawnea la bala si esta fuera de la camara.
+            if(jugador.balas[i].activa == true) // Mueve las balas respecto a su direccion de movimiento, unica a cada bala del arreglo.
             {
-               jugador.balas[i].posX += VELOCIDAD_BALA * jugador.balas[i].direccion;
+               if(balaDiagonal(jugador, i) == true) // Reduce el desplazamiento de bala si es diagonal.
+               {
+                  desplazamientoBala = VELOCIDAD_BALA * sqrt(2) / 2;
+               }
+               else
+               {
+                  desplazamientoBala = VELOCIDAD_BALA;
+               }
+               if(jugador.balas[i].direccion.Arriba == true)
+               {
+                  jugador.balas[i].posY -= desplazamientoBala;
+               }
+               if(jugador.balas[i].direccion.Abajo == true)
+               {
+                  jugador.balas[i].posY += desplazamientoBala;
+               }
+               if(jugador.balas[i].direccion.Izquierda == true)
+               {
+                  jugador.balas[i].posX -= desplazamientoBala;
+               }
+               if(jugador.balas[i].direccion.Derecha == true)
+               {
+                  jugador.balas[i].posX += desplazamientoBala;
+               }
             }
-            if(jugador.balas[i].posX < camaraX - LARGO || jugador.balas[i].posX > camaraX + LARGO_PANTALLA) // Fuera de pantalla.
+            if(jugador.balas[i].posX < camaraX - LARGO || jugador.balas[i].posX > camaraX + LARGO_PANTALLA) // Despawnea la bala si esta fuera de la camara.
             {
-               jugador.balas[i].activa = false;
+               jugador.balas[i].activa = false; // Desactiva la bala y sus direcciones para que no interfiera con el movimiento de las proximas.
+               jugador.balas[i].direccion.Arriba = false;
+               jugador.balas[i].direccion.Abajo = false; // TAMBIEN DESPAWNEAR SI SE SALE DE LA PANTALLA POR ARRIBA O POR ABAJO
+               jugador.balas[i].direccion.Izquierda = false;
+               jugador.balas[i].direccion.Derecha = false;
                continue;
             }
             int fila = (int)(jugador.balas[i].posY / ANCHO);
-            for(int col = 0; col < LARGO_MAPA; col++) // Solo revisa la fila donde está la bala.
+            if(fila >= 0 && fila <= ANCHO_MAPA)
             {
-               if(mapa[fila][col] == '#')
+               for(int col = 0; col < LARGO_MAPA; col++) // Solo revisa la fila donde esta la bala.
                {
-                  float bloqueX = col * LARGO;
-                  if(jugador.balas[i].posX + LARGO_BALA > bloqueX && bloqueX + LARGO > jugador.balas[i].posX)
+                  if(mapa[fila][col] == '#')
                   {
-                     jugador.balas[i].activa = false;
-                     break;
+                     float bloqueX = col * LARGO;
+                     if(jugador.balas[i].posX + LARGO_BALA > bloqueX && bloqueX + LARGO > jugador.balas[i].posX)
+                     {
+                        jugador.balas[i].activa = false;
+                        jugador.balas[i].direccion.Arriba = false;
+                        jugador.balas[i].direccion.Abajo = false;
+                        jugador.balas[i].direccion.Izquierda = false;
+                        jugador.balas[i].direccion.Derecha = false;
+                     }
+                  }
+               }
+            }
+         }
+
+         for(i = 0; i < MAX_BALAS; i++) // Revisa las colisiones entre balas y enemigos susceptibles a golpes.
+         {
+            for(contEnemigos = 0; contEnemigos < cantidadEnemigosA; contEnemigos++) // Enemigos A
+            {
+               if(jugador.balas[i].activa == true && enemigosA[contEnemigos].activo == true) // Si bala y enemigo estan activos:
+               {
+                  if(generalCollide(jugador.balas[i].posX, jugador.balas[i].posY, LARGO_BALA, ANCHO_BALA, enemigosA[contEnemigos].posX, enemigosA[contEnemigos].posY, LARGO, ANCHO))
+                  {
+                     enemigosA[contEnemigos].vida -= DANHO_BALA;
+                     jugador.balas[i].activa = false; // Despawn de bala.
+                     jugador.balas[i].direccion.Arriba = false;
+                     jugador.balas[i].direccion.Abajo = false;
+                     jugador.balas[i].direccion.Izquierda = false;
+                     jugador.balas[i].direccion.Derecha = false;
+                     if(enemigosA[contEnemigos].vida <= 0)
+                     {
+                        enemigosA[contEnemigos].activo = false;
+                     }
+                  }
+               }
+            }
+            for(contEnemigos = 0; contEnemigos < cantidadEnemigosC; contEnemigos++) // Enemigos C
+            {
+               if(jugador.balas[i].activa == true && enemigosC[contEnemigos].activo == true)
+               {
+                  if(generalCollide(jugador.balas[i].posX, jugador.balas[i].posY, LARGO_BALA, ANCHO_BALA, enemigosC[contEnemigos].posX, enemigosC[contEnemigos].posY, LARGO, ANCHO))
+                  {
+                     enemigosC[contEnemigos].vida -= DANHO_BALA;
+                     jugador.balas[i].activa = false; // Despawn de bala.
+                     jugador.balas[i].direccion.Arriba = false;
+                     jugador.balas[i].direccion.Abajo = false;
+                     jugador.balas[i].direccion.Izquierda = false;
+                     jugador.balas[i].direccion.Derecha = false;
+                     if(enemigosC[contEnemigos].vida <= 0)
+                     {
+                        enemigosC[contEnemigos].activo = false;
+                     }
                   }
                }
             }
@@ -535,35 +702,44 @@ int main()
 
          for(contEnemigos = 0; contEnemigos < cantidadEnemigosA; contEnemigos++) // Movimiento de los enemigos A.
          {
-            if(enemigosA[contEnemigos].colisionEnemigoA == true) // Si chocan:
+            if(enemigosA[contEnemigos].activo == true) // Si esta activo:
             {
-               if(enemigosA[contEnemigos].direccionMovimientoA == VELOCIDAD_ENEMIGO_A) // Anula el movimiento del enemigo segun el valor de direccionMovimiento.
+               if(enemigosA[contEnemigos].colisionEnemigoA == true) // Si chocan:
                {
-                  enemigosA[contEnemigos].posX = enemigosA[contEnemigos].puntoColisionA - LARGO;
-               }
-               else if(enemigosA[contEnemigos].direccionMovimientoA == -VELOCIDAD_ENEMIGO_A)
-               {
-                  enemigosA[contEnemigos].posX = enemigosA[contEnemigos].puntoColisionA + LARGO;
-               }
-               enemigosA[contEnemigos].direccionMovimientoA *= -1; // Invierte la direccion de movimiento.
-               enemigosA[contEnemigos].colisionEnemigoA = false; // Anula la bandera de colision para que no se de vuelta de nuevo.
-            }
-            enemigosA[contEnemigos].posX += enemigosA[contEnemigos].direccionMovimientoA; // Desplaza al enemigo correspondiente.
-         }
-
-         for(contEnemigos = 0; contEnemigos < cantidadEnemigosA; contEnemigos++)  // Revisa las colisiones en los enemigos A.
-         {
-            int fila = enemigosA[contEnemigos].posY / ANCHO;
-            for(j = 0; j < LARGO_MAPA; j++)
-            {
-               if(mapa[fila][j] == '#')
-               {
-                  puntoX = j*LARGO;
-                  if(enemigosA[contEnemigos].posX + LARGO > puntoX && puntoX + LARGO > enemigosA[contEnemigos].posX)
+                  if(enemigosA[contEnemigos].direccionMovimientoA == VELOCIDAD_ENEMIGO_A) // Anula el movimiento del enemigo segun el valor de direccionMovimiento.
                   {
-                     enemigosA[contEnemigos].colisionEnemigoA = true;
-                     enemigosA[contEnemigos].puntoColisionA = puntoX;
-                     break;
+                     enemigosA[contEnemigos].posX = enemigosA[contEnemigos].puntoColisionA - LARGO;
+                  }
+                  else if(enemigosA[contEnemigos].direccionMovimientoA == -VELOCIDAD_ENEMIGO_A)
+                  {
+                     enemigosA[contEnemigos].posX = enemigosA[contEnemigos].puntoColisionA + LARGO;
+                  }
+                  enemigosA[contEnemigos].direccionMovimientoA *= -1; // Invierte la direccion de movimiento.
+                  enemigosA[contEnemigos].colisionEnemigoA = false; // Anula la bandera de colision para que no se de vuelta de nuevo.
+               }
+               enemigosA[contEnemigos].posX += enemigosA[contEnemigos].direccionMovimientoA; // Desplaza al enemigo correspondiente.
+
+               int fila = enemigosA[contEnemigos].posY / ANCHO; // Revisa las colisiones de bloques en los enemigos A.
+               for(j = 0; j < LARGO_MAPA; j++)
+               {
+                  if(mapa[fila][j] == '#')
+                  {
+                     puntoX = j*LARGO;
+                     if(enemigosA[contEnemigos].posX + LARGO > puntoX && puntoX + LARGO > enemigosA[contEnemigos].posX)
+                     {
+                        enemigosA[contEnemigos].colisionEnemigoA = true;
+                        enemigosA[contEnemigos].puntoColisionA = puntoX;
+                        break;
+                     }
+                  }
+               }
+
+               if(fabs(enemigosA[contEnemigos].posX - jugador.posX) <= LARGO * 3 && fabs(enemigosA[contEnemigos].posY - jugador.posY) <= ANCHO * 3)
+               {
+                  if(collide(font, jugador, &enemigosA[contEnemigos].posX, &enemigosA[contEnemigos].posY) == true && iFrames == 0)
+                  {
+                     jugador.vida--; // Resta 1 punto de vida.
+                     iFrames = INVINCIBILITY_FRAMES; // Otorga 120 frames de invencibilidad.
                   }
                }
             }
@@ -590,69 +766,67 @@ int main()
          }*/
          for(contEnemigos = 0; contEnemigos < cantidadEnemigosC; contEnemigos++)  // Movimiento de los enemigos C.
          {
-            if(fabs(enemigosC[contEnemigos].posX - jugador.posX) <= (float)(LARGO_PANTALLA) / 2)
+            if(enemigosC[contEnemigos].activo == true) // Si esta activo:
             {
-               al_start_timer(enemigosC[contEnemigos].tempEnemigosC); // Inicia el timer de posicion de enemigos C.
-            }
-            if(al_get_timer_started(enemigosC[contEnemigos].tempEnemigosC) == true)
-            {
-               enemigosC[contEnemigos].valorTimerEnemigosC = al_get_timer_count(enemigosC[contEnemigos].tempEnemigosC);
-               enemigosC[contEnemigos].posX = enemigosC[contEnemigos].nodoCX + HORIZONTAL_OSCILLATION_RANGE_C * sinf(enemigosC[contEnemigos].valorTimerEnemigosC / OSCILLATION_SPEED_C);
-               enemigosC[contEnemigos].posY = enemigosC[contEnemigos].nodoCY + VERTICAL_OSCILLATION_RANGE_C* cosf(enemigosC[contEnemigos].valorTimerEnemigosC / OSCILLATION_SPEED_C) * cosf(enemigosC[contEnemigos].valorTimerEnemigosC / 25);
-               enemigosC[contEnemigos].nodoCY += FALLING_SPEED_C;
+               if(fabs(enemigosC[contEnemigos].posX - jugador.posX) <= (float)(LARGO_PANTALLA) / 2)
+               {
+                  al_start_timer(enemigosC[contEnemigos].tempEnemigosC); // Inicia el timer de posicion de enemigos C.
+               }
+               if(al_get_timer_started(enemigosC[contEnemigos].tempEnemigosC) == true)
+               {
+                  enemigosC[contEnemigos].valorTimerEnemigosC = al_get_timer_count(enemigosC[contEnemigos].tempEnemigosC);
+                  enemigosC[contEnemigos].posX = enemigosC[contEnemigos].nodoCX + HORIZONTAL_OSCILLATION_RANGE_C * sinf(enemigosC[contEnemigos].valorTimerEnemigosC / OSCILLATION_SPEED_C);
+                  enemigosC[contEnemigos].posY = enemigosC[contEnemigos].nodoCY + VERTICAL_OSCILLATION_RANGE_C* cosf(enemigosC[contEnemigos].valorTimerEnemigosC / OSCILLATION_SPEED_C) * cosf(enemigosC[contEnemigos].valorTimerEnemigosC / 25);
+                  enemigosC[contEnemigos].nodoCY += FALLING_SPEED_C;
+               }
+               
+               if(fabs(enemigosC[contEnemigos].posX - jugador.posX) <= LARGO * 3 && fabs(enemigosC[contEnemigos].posY - jugador.posY) <= ANCHO * 3)
+               {
+                  if(collide(font, jugador, &enemigosC[contEnemigos].posX, &enemigosC[contEnemigos].posY) == true && iFrames == 0)
+                  {
+                     jugador.vida--; // Resta 1 punto de vida.
+                     iFrames = INVINCIBILITY_FRAMES; // Otorga 120 frames de invencibilidad.
+                  }
+               }
             }
          }
 
          for(contEnemigos = 0; contEnemigos < cantidadEnemigosE; contEnemigos++)  // Movimiento de los enemigos E.
          {
-            enemigosE[contEnemigos].posY = enemigosE[contEnemigos].nodoE + 150 * sinf(valorTimerEnemigosE / 25);
+            if(enemigosE[contEnemigos].activo == true) // Si esta activo:
+            {
+               enemigosE[contEnemigos].posY = enemigosE[contEnemigos].nodoE + 150 * sinf(valorTimerEnemigosE / 25);
+
+               if(fabs(enemigosE[contEnemigos].posX - jugador.posX) <= LARGO * 3 && fabs(enemigosE[contEnemigos].posY - jugador.posY) <= ANCHO * 3)
+               {
+                  if(collide(font, jugador, &enemigosE[contEnemigos].posX, &enemigosE[contEnemigos].posY) == true && iFrames == 0)
+                  {
+                     jugador.vida--; // Resta 1 punto de vida.
+                     iFrames = INVINCIBILITY_FRAMES; // Otorga 120 frames de invencibilidad.
+                  }
+                  if(collideParry(font, jugador, &enemigosE[contEnemigos].posX, &enemigosE[contEnemigos].posY) == true && parryFrames > 0)
+                  {
+                     al_rest(0.1);
+                     al_set_timer_count(tempGravedad, -20);
+                     teclaSoltada = true;
+                     parryFrames = 0;
+                     enemigosE[contEnemigos].activo = false;
+                  }
+               }
+            }
          }
 
-         for(contEnemigos = 0; contEnemigos < cantidadEnemigosA; contEnemigos++) // Colision personaje-enemigo A:
+         for(cont = 0; cont < cantidadMonedas; cont++)
          {
-            if(fabs(enemigosA[contEnemigos].posX - jugador.posX) <= LARGO * 3 && fabs(enemigosA[contEnemigos].posY - jugador.posY) <= ANCHO * 3)
+            if(monedasMapa[cont].activo == true)
             {
-               if(collide(font, jugador, &enemigosA[contEnemigos].posX, &enemigosA[contEnemigos].posY) == true && iFrames == 0)
+               if(fabs(monedasMapa[cont].posX - jugador.posX) <= LARGO * 3 && fabs(monedasMapa[cont].posY - jugador.posY) <= ANCHO * 3)
                {
-                  jugador.vida--; // Resta 1 punto de vida.
-                  iFrames = INVINCIBILITY_FRAMES; // Otorga 120 frames de invencibilidad.
-               }
-            }
-         }
-         for(contEnemigos = 0; contEnemigos < cantidadEnemigosC; contEnemigos++) // Colision personaje-enemigo C:
-         {
-            if(fabs(enemigosC[contEnemigos].posX - jugador.posX) <= LARGO * 3 && fabs(enemigosC[contEnemigos].posY - jugador.posY) <= ANCHO * 3)
-            {
-               if(collide(font, jugador, &enemigosC[contEnemigos].posX, &enemigosC[contEnemigos].posY) == true && iFrames == 0)
-               {
-                  jugador.vida--; // Resta 1 punto de vida.
-                  iFrames = INVINCIBILITY_FRAMES; // Otorga 120 frames de invencibilidad.
-               }
-            }
-         }
-         for(contEnemigos = 0; contEnemigos < cantidadEnemigosE; contEnemigos++) // Colision personaje-enemigo E:
-         {
-            if(fabs(enemigosE[contEnemigos].posX - jugador.posX) <= LARGO * 3 && fabs(enemigosE[contEnemigos].posY - jugador.posY) <= ANCHO * 3)
-            {
-               if(collide(font, jugador, &enemigosE[contEnemigos].posX, &enemigosE[contEnemigos].posY) == true && iFrames == 0)
-               {
-                  jugador.vida--; // Resta 1 punto de vida.
-                  iFrames = INVINCIBILITY_FRAMES; // Otorga 120 frames de invencibilidad.
-               }
-            }
-         }
-         for(contEnemigos = 0; contEnemigos < cantidadEnemigosE; contEnemigos++) // Colision parry propio-enemigo E:
-         {
-            if(fabs(enemigosE[contEnemigos].posX - jugador.posX) <= LARGO * 3 && fabs(enemigosE[contEnemigos].posY - jugador.posY) <= ANCHO * 3)
-            {
-               if(collideParry(font, jugador, &enemigosE[contEnemigos].posX, &enemigosE[contEnemigos].posY) == true && parryFrames > 0)
-               {
-                  al_rest(0.1);
-                  al_set_timer_count(tempGravedad, -20);
-                  teclaSoltada = true;
-                  parryFrames = 0;
-                  /*enemigosE[contEnemigos].posX = OUT_OF_BOUNDS;
-                  enemigosE[contEnemigos].posY = OUT_OF_BOUNDS;*/
+                  if(collide(font, jugador, &monedasMapa[cont].posX, &monedasMapa[cont].posY) == true)
+                  {
+                     jugador.monedas++;
+                     monedasMapa[cont].activo = false;
+                  }
                }
             }
          }
@@ -676,11 +850,11 @@ int main()
 
                         if(overlapX < overlapY)
                         {
-                           jugador.posX = anularMovimientoX(font, &jugador, jugador.posX, &puntoX);
+                           jugador.posX = anularMovimientoX(&jugador, jugador.posX, &puntoX);
                         }
                         else
                         {
-                           jugador.posY = anularMovimientoY(font, &jugador, jugador.posY, &puntoY, tempGravedad);
+                           jugador.posY = anularMovimientoY(&jugador, jugador.posY, &puntoY, tempGravedad);
                            al_set_timer_count(tempGravedad, 0);
                         }
                         /*if(jugadorEnAire == false || (direccion.Izquierda == false && direccion.Derecha == false))
@@ -698,7 +872,7 @@ int main()
                   {
                      if(collide(font, jugador, &puntoX, &puntoY) == true && jugador.posY <= puntoY && cayendo == true) // Deben chocar, el personaje debe estar mas alto que la plataforma, y el personaje debe estar cayendo estrictamente para abajo.
                      {
-                        jugador.posY = anularMovimientoY(font, &jugador, jugador.posY, &puntoY, tempGravedad);
+                        jugador.posY = anularMovimientoY(&jugador, jugador.posY, &puntoY, tempGravedad);
                      }
                   }
                   if(mapa[i][j] == '/') // Colision personaje-pincho:
@@ -731,9 +905,31 @@ int main()
                         healCD = INVINCIBILITY_FRAMES;
                      }
                   }
-                  if(mapa[i][j] == 'O') // Colision personaje-portal
+                  if(mapa[i][j] == '?') // Colision personaje-bloque de secreto:
                   {
-                     if(collideParry(font, jugador, &puntoX, &puntoY) == true && direccion.Arriba == true) // Utiliza el cuadrado parry para facilitar la entrada al portal.
+                     if(collide(font, jugador, &puntoX, &puntoY) == true)
+                     {
+                        atravesando = true;
+                     }
+                  }
+                  if(mapa[i][j] == 'v') // Colision personaje-portal de entrada
+                  {
+                     if(collideParry(font, jugador, &puntoX, &puntoY) == true && jugador.direccion.Arriba == true) // Utiliza el cuadrado parry para facilitar la entrada al portal.
+                     {
+                        jugador.posX = portalSalida.posX + 80;
+                        jugador.posY = portalSalida.posY;
+                     }
+                  }
+                  if(mapa[i][j] == '^') // Colision personaje-portal local
+                  {
+                     if(collideParry(font, jugador, &puntoX, &puntoY) == true && jugador.direccion.Arriba == true && primeraVezSalto == false) // Utiliza el cuadrado parry para facilitar la entrada al portal.
+                     {
+                        jugador.posY = REGRESO_DE_PORTAL;
+                     }
+                  }
+                  if(mapa[i][j] == 'O') // Colision personaje-portal de transicion
+                  {
+                     if(collideParry(font, jugador, &puntoX, &puntoY) == true && jugador.direccion.Arriba == true)
                      {
                         al_draw_textf(font, al_map_rgb(255, 255, 255), jugador.posX, jugador.posY + 50, 0, "Transicionando...");
                         nivel++;
@@ -744,6 +940,7 @@ int main()
                         cantidadEnemigosA = 0;
                         cantidadEnemigosC = 0;
                         cantidadEnemigosE = 0;
+                        cantidadMonedas = 0;
                         al_rest(1);
                         cargarMapa(CARGADO_DE_MAPA);
                      }
@@ -814,22 +1011,33 @@ int main()
 
          // 2: Dibujar el siguiente frame.
 
-         for(i = 0; i < ANCHO_MAPA; i++) // Dibuja el respectivo mapa (PASAR A FUNCION DESPUES)
+         if(nivel == 1)
+         {
+            al_draw_textf(font, al_map_rgb(255, 255, 255), 1270, 660, ALLEGRO_ALIGN_RIGHT, "Controles:");
+            al_draw_textf(font, al_map_rgb(255, 255, 255), 1270, 670, ALLEGRO_ALIGN_RIGHT, "< v ^ > : Movimiento y orientacion");
+            al_draw_textf(font, al_map_rgb(255, 255, 255), 1270, 680, ALLEGRO_ALIGN_RIGHT, "X : Dash");
+            al_draw_textf(font, al_map_rgb(255, 255, 255), 1270, 690, ALLEGRO_ALIGN_RIGHT, "[  __  ] : Salto");
+            al_draw_textf(font, al_map_rgb(255, 255, 255), 1270, 700, ALLEGRO_ALIGN_RIGHT, "[  __  ] en el aire : Parry");
+            al_draw_textf(font, al_map_rgb(255, 255, 255), 1270, 710, ALLEGRO_ALIGN_RIGHT, "Z : Disparo");
+         }
+
+         for(i = ANCHO_MAPA - 1; i >=0; i--) // Dibuja el respectivo mapa (PASAR A FUNCION DESPUES)
          {
             for(j = 0; j < LARGO_MAPA; j++)
             {
                drawX = j*LARGO - camaraX;
                drawY = i*ANCHO - camaraY;
+               float drawSecreto = 0.5 + transparenciaBloque / 2;
                if(mapa[i][j] == '#') // Suelo
                {
                   //al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(0, 0, 0.5, 0.2)); // Dibuja el cuadrado suelo.
                   if(i == 0)
                   {
-                     al_draw_bitmap(sprites.pasto, drawX, drawY, 0);
+                     al_draw_bitmap(sprites.tierra, drawX, drawY, 0);
                   }
                   if(i - 1 >= 0)
                   {
-                     if(mapa[i - 1][j] != '#')  // Dibuja pasto si la casilla superior es vacio.
+                     if(mapa[i - 1][j] != '#' && mapa[i - 1][j] != '+') // Dibuja pasto si la casilla superior es vacio.
                      {
                         al_draw_bitmap(sprites.pasto, drawX, drawY, 0);
                      }
@@ -837,6 +1045,28 @@ int main()
                      {
                         al_draw_bitmap(sprites.tierra, drawX, drawY, 0);
                      }
+                  }
+               }
+               if(mapa[i][j] == '+') // Tierra (auto tiling secundario)
+               {
+                  for(cont = 0; i >= cont; cont++)
+                  {
+                     if(mapa[i - cont][j] == '#')
+                     {
+                        break;
+                     }
+                     al_draw_bitmap(sprites.tierra, drawX, (i - cont)*ANCHO - camaraY, 0);
+                  }
+               }
+               if(mapa[i][j] == 'x') // Tierra (fondo)
+               {
+                  for(cont = 0; i >= cont; cont++)
+                  {
+                     if(mapa[i - cont][j] == '#' || mapa[i - cont][j] == '-')
+                     {
+                        break;
+                     }
+                     al_draw_tinted_bitmap(sprites.tierra, al_map_rgba_f(0.5, 0.5, 0.5, 1), drawX, (i - cont)*ANCHO - camaraY, 0);
                   }
                }
                if(mapa[i][j] == '=') // Plataforma atravesable
@@ -849,7 +1079,6 @@ int main()
                   //al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(0.5, 0, 0, 0.2));
                   al_draw_bitmap(sprites.enredadera, drawX, drawY, 0);
                }
-
                if(mapa[i][j] == 'p') // Parry enemigo
                {
                   //al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(1, 0.5, 0.6, 0.2));
@@ -858,6 +1087,19 @@ int main()
                if(mapa[i][j] == 'H') // Corazon
                {
                   //al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(0, 0.4, 0, 0.2));
+               }
+               if(mapa[i][j] == '?') // Bloque de secreto
+               {
+                  al_draw_tinted_bitmap(sprites.tierra, al_map_rgba_f(drawSecreto, drawSecreto, drawSecreto, 1), drawX, drawY, 0);
+               }
+               if(mapa[i][j] == 'v') // Portal local de entrada
+               {
+                  al_draw_tinted_bitmap(sprites.tierra, al_map_rgba_f(drawSecreto, drawSecreto, drawSecreto, 1), drawX, drawY, 0);
+                  al_draw_tinted_bitmap(sprites.portal_local, al_map_rgba_f(drawSecreto, drawSecreto, drawSecreto, 1 - transparenciaBloque), drawX, drawY, 0);
+               }
+               if(mapa[i][j] == '^') // Portal local de salida
+               {
+                  al_draw_tinted_bitmap(sprites.portal_local, al_map_rgba_f(0.5, 0.5, 0.5, 1), drawX, drawY, 0);
                }
                if(mapa[i][j] == 'O') // Portal
                {
@@ -868,11 +1110,40 @@ int main()
                {
                   //al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(1, 1, 1, 0.2));
                }
-               if(mapa[i][j] == '+') // Tierra (fondo)
+            }
+         }
+
+         for(j = 0; j < LARGO_MAPA; j++) // Auto tiling desde el vacio para arriba, para tierra regular y enredaderas.
+         {
+            for(i = ANCHO_MAPA - 1; i >= 0; i--)
+            {
+               for(cont = ANCHO_MAPA - 1; cont >= 0; cont--) // Revisa si la columna contiene enredaderas para dibujar ellas en vez de tierra.
                {
-                  al_draw_tinted_bitmap(sprites.tierra, al_map_rgba_f(0.5, 0.5, 0.5, 1), drawX, drawY, 0);
+                  if(mapa[cont][j] == '/')
+                  {
+                     columnaEnredaderas = true;
+                     break;
+                  }
+               }
+               drawX = j*LARGO - camaraX;
+               drawY = i*ANCHO - camaraY;
+               if(mapa[i][j] == '#' || mapa[i][j] == '/') // Si encuentra tierra o enredaderas:
+               {
+                  break; // Rompe el bucle for, continuando a la siguiente columna.
+               }
+               if(mapa[i][j] == '.') // Dibuja tierra o enredaderas segun el valor de columnaEnredaderas.
+               {
+                  if(columnaEnredaderas == true)
+                  {
+                     al_draw_bitmap(sprites.enredadera, drawX, drawY, 0);
+                  }
+                  else
+                  {
+                     al_draw_bitmap(sprites.tierra, drawX, drawY, 0);
+                  }
                }
             }
+            columnaEnredaderas = false;
          }
 
          //if(SPRITES == true)
@@ -928,6 +1199,16 @@ int main()
             al_draw_rotated_bitmap(sprites.enemigoE, (int)(LARGO / 2), (int)(ANCHO / 2), drawEnemigosX + (int)(LARGO / 2), drawEnemigosY + (int)(ANCHO / 2), valorTimer / SPIN_RATE_ENEMIGO_E, 0);
          }
 
+         for(cont = 0; cont < cantidadMonedas; cont++)
+         {
+            if(monedasMapa[cont].activo == true)
+            {
+               drawX = monedasMapa[cont].posX - camaraX;
+               drawY = monedasMapa[cont].posY - camaraY;
+               al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(1, 1, 0, 0.2));
+            }
+         }
+
          if(parryFrames > 0) // Animacion del personaje.
          {
             al_draw_bitmap(sprites.jugador_parry, jugador.posX - camaraX, jugador.posY - camaraY, 0);
@@ -936,7 +1217,7 @@ int main()
          {
             al_draw_bitmap(sprites.jugador_salto, jugador.posX - camaraX, jugador.posY - camaraY, 0);
          }
-         else if(direccion.Izquierda == true || direccion.Derecha == true)
+         else if(jugador.direccion.Izquierda == true || jugador.direccion.Derecha == true)
          {
             if(jugador.orientacion == -1)
             {
@@ -997,23 +1278,22 @@ int main()
          al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 530, 0, "enemigosA[0].direccionMovimiento: %d", enemigosA[0].direccionMovimientoA);
          al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 540, 0, "enemigosA[0].colisionEnemigo: %d", enemigosA[0].colisionEnemigoA);
 
-         if(direccion.Arriba == true) // Imprime las direcciones ingresadas.
+         if(jugador.direccion.Arriba == true) // Imprime las direcciones ingresadas.
          {
             al_draw_textf(font, al_map_rgb(255, 255, 255), 10, 70, 0, "^");
          }
-         if(direccion.Abajo == true)
+         if(jugador.direccion.Abajo == true)
          {
             al_draw_textf(font, al_map_rgb(255, 255, 255), 10, 90, 0, "v");
          }
-         if(direccion.Izquierda == true)
+         if(jugador.direccion.Izquierda == true)
          {
             al_draw_textf(font, al_map_rgb(255, 255, 255), 0, 80, 0, "<");
          }
-         if(direccion.Derecha == true)
+         if(jugador.direccion.Derecha == true)
          {
             al_draw_textf(font, al_map_rgb(255, 255, 255), 20, 80, 0, ">");
          }
-         al_draw_textf(font, al_map_rgb(255, 255, 255), 10, 100, 0, "X: %d", direccion.X);
 
          for(i = 0; i < ANCHO_MAPA; i++)
          {
@@ -1042,19 +1322,11 @@ int main()
          al_draw_textf(font, al_map_rgb(255, 255, 255), 350, 120, 0, "DEBUG: puedeHacerParry = %d", puedeHacerParry);
          al_draw_textf(font, al_map_rgb(255, 255, 255), 350, 130, 0, "DEBUG: parryFrames = %d", parryFrames);
 
-         for(i = 0; i < MAX_BALAS; i++)
-         {
-            al_draw_textf(font, al_map_rgb(255, 255, 255), i * 10, 250, 0, "%d,  ", jugador.balas[i].activa);
-         }
+         al_draw_textf(font, al_map_rgb(255, 255, 255), 350, 150, 0, "monedas = %d", jugador.monedas);
 
+         al_draw_textf(font, al_map_rgb(255, 255, 255), 350, 170, 0, "DEBUG: transparenciaBloque = %f", transparenciaBloque);
 
          // 4. Ajustar ciertas variables al final de un frame.
-
-         direccion.Arriba = false; // Reinicia la direccion (esta se obtiene cada frame).
-         direccion.Abajo = false;
-         direccion.Izquierda = false;
-         direccion.Derecha = false;
-         direccion.X = false;
 
          jugadorEnAire = true;
 
@@ -1079,6 +1351,20 @@ int main()
          if(jugador.disparoCD > 0)
          {
             jugador.disparoCD--;
+         }
+         if(atravesando == true)
+         {
+            if(transparenciaBloque > 0)
+            {
+               transparenciaBloque -= 0.02;
+            }
+         }
+         else
+         {
+            if(transparenciaBloque < 1)
+            {
+               transparenciaBloque += 0.02;
+            }
          }
 
          al_flip_display();
@@ -1172,6 +1458,35 @@ bool collide(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY)
    return false;
 }
 
+bool collideAnticipado(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY)
+{
+   int chequeoColision = 0;
+
+   if(entidad.posX+LARGO+2>*sueloX)
+   {
+      chequeoColision++;
+   }
+   if(*sueloX+LARGO+2>entidad.posX)
+   {
+      chequeoColision++;
+   }
+   if(entidad.posY+ANCHO+2>*sueloY)
+   {
+      chequeoColision++;
+   }
+   if(*sueloY+ANCHO+2>entidad.posY)
+   {
+      chequeoColision++;
+   }
+
+   if(chequeoColision==4)
+   {
+      return true;
+   }
+
+   return false;
+}
+
 bool collideParry(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sueloY)
 {
    int chequeoColision = 0;
@@ -1238,7 +1553,7 @@ bool collideSuelo(ALLEGRO_FONT *font, entidad entidad, float *sueloX, float *sue
    return false;
 }
 
-float anularMovimientoX(ALLEGRO_FONT* font, entidad *entidad, float posXAnterior, float *sueloX)
+float anularMovimientoX(entidad *entidad, float posXAnterior, float *sueloX)
 {
    if(posXAnterior < *sueloX) // Si venia por la izquierda:
    {
@@ -1252,7 +1567,7 @@ float anularMovimientoX(ALLEGRO_FONT* font, entidad *entidad, float posXAnterior
    return entidad->posX;
 }
 
-float anularMovimientoY(ALLEGRO_FONT* font, entidad *entidad, float posYAnterior, float *sueloY, ALLEGRO_TIMER* tempGravedad)
+float anularMovimientoY(entidad *entidad, float posYAnterior, float *sueloY, ALLEGRO_TIMER* tempGravedad)
 {
    if(posYAnterior < *sueloY) // Si caia desde arriba:
    {
@@ -1268,11 +1583,30 @@ float anularMovimientoY(ALLEGRO_FONT* font, entidad *entidad, float posYAnterior
    return entidad->posY;
 }
 
+bool balaDiagonal(entidad jugador, int numeroBala)
+{
+   if(jugador.balas[numeroBala].direccion.Arriba == true || jugador.balas[numeroBala].direccion.Abajo == true)
+   {
+      if(jugador.balas[numeroBala].direccion.Izquierda == true || jugador.balas[numeroBala].direccion.Derecha == true)
+      {
+         return true;
+      }
+   }
+   if(jugador.balas[numeroBala].direccion.Izquierda == true || jugador.balas[numeroBala].direccion.Derecha == true)
+   {
+      if(jugador.balas[numeroBala].direccion.Arriba == true || jugador.balas[numeroBala].direccion.Abajo == true)
+      {
+         return true;
+      }
+   }
+
+   return false;
+}
+
 void cargarMapa(VARIABLES_CARGARMAPA)
-//void cargarMapa(char *ruta_archivo, entidad jugador)
 {
    FILE *contenidoMapa;
-   int i, j; 
+   int i, j;
    char valorRecibido;
 
    switch(nivel)
@@ -1311,6 +1645,7 @@ void cargarMapa(VARIABLES_CARGARMAPA)
                   // revisar esto, por ejemplo: si coloco mas enemigos que el maximo, se cae
                   // la solucion: llegado a esta parte, recorrer el arreglo de enemigos y buscar un espacio para el nuevo enemigo
                   //tipo_enemigo
+                  enemigosA[*cantidadEnemigosA].activo = true;
                   enemigosA[*cantidadEnemigosA].posX = j*LARGO;
                   enemigosA[*cantidadEnemigosA].posY = i*ANCHO;
                   enemigosA[*cantidadEnemigosA].vida = VIDA_ENEMIGO_A;
@@ -1330,8 +1665,10 @@ void cargarMapa(VARIABLES_CARGARMAPA)
             {
                if(*cantidadEnemigosC < MAX_ENEMIGOS)
                {
+                  enemigosC[*cantidadEnemigosC].activo = true;
                   enemigosC[*cantidadEnemigosC].posX = j*LARGO;
                   enemigosC[*cantidadEnemigosC].posY = i*ANCHO;
+                  enemigosC[*cantidadEnemigosC].vida = VIDA_ENEMIGO_C;
                   enemigosC[*cantidadEnemigosC].nodoCY = enemigosC[*cantidadEnemigosC].posY - 80;
                   enemigosC[*cantidadEnemigosC].nodoCX = enemigosC[*cantidadEnemigosC].posX;
                   enemigosC[*cantidadEnemigosC].tempEnemigosC = al_create_timer(1.0 / TARGET_FPS); // Temporizador de posicion de enemigos C.
@@ -1347,6 +1684,7 @@ void cargarMapa(VARIABLES_CARGARMAPA)
             {
                if(*cantidadEnemigosE < MAX_ENEMIGOS)
                {
+                  enemigosE[*cantidadEnemigosE].activo = true;
                   enemigosE[*cantidadEnemigosE].posX = j*LARGO;
                   enemigosE[*cantidadEnemigosE].posY = i*ANCHO;
                   enemigosE[*cantidadEnemigosE].nodoE = enemigosE[*cantidadEnemigosE].posY;
@@ -1356,6 +1694,22 @@ void cargarMapa(VARIABLES_CARGARMAPA)
                {
                   printf("Advertencia: Hay mas enemigos E que los que soporta el arreglo\n");
                }
+            }
+            if(valorRecibido == '$')
+            {
+               if(*cantidadMonedas < MAX_MONEDAS)
+               {
+                  monedasMapa[*cantidadMonedas].activo = true;
+                  monedasMapa[*cantidadMonedas].posX = j*LARGO;
+                  monedasMapa[*cantidadMonedas].posY = i*ANCHO;
+                  (*cantidadMonedas)++;
+               }
+            }
+            if(valorRecibido == '^')
+            {
+               portalSalida->posX = j*LARGO;
+               portalSalida->posY = i*ANCHO;
+               portalSalida->activo = true;
             }
             if(valorRecibido == 'i') // Define el punto de inicio del jugador en el caso del cargado de una casilla 'i'
             {
@@ -1393,7 +1747,8 @@ void sprites_init()
 
    sprites.enredadera = sprite_grab(LARGO * 3, 0, LARGO_BLOQUE, ANCHO_BLOQUE);
    sprites.flor = sprite_grab(LARGO * 4, 0, LARGO_BLOQUE, ANCHO_BLOQUE);
-   sprites.puerta = sprite_grab(LARGO * 5, 0, LARGO_BLOQUE, ANCHO_BLOQUE);
+   sprites.puerta = sprite_grab(LARGO * 5, 0, LARGO_BLOQUE, ANCHO_BLOQUE * 2);
+   sprites.portal_local = sprite_grab(LARGO * 2, ANCHO, LARGO_BLOQUE, ANCHO_BLOQUE);
 
    sprites.enemigoA[0] = sprite_grab(0, ANCHO * 2, LARGO_ENEMIGO_A, ANCHO_ENEMIGO_A);
    sprites.enemigoA[1] = sprite_grab(LARGO, ANCHO * 2, LARGO_ENEMIGO_A, ANCHO_ENEMIGO_A);
@@ -1406,14 +1761,14 @@ void sprites_init()
    sprites.enemigoC = sprite_grab(LARGO * 7, 52, LARGO_ENEMIGO_C, ANCHO_ENEMIGO_C);
    sprites.enemigoE = sprite_grab(LARGO * 7, 0, LARGO_ENEMIGO_E, ANCHO_ENEMIGO_E);
 
-   sprites.jugador_quieto[0] = sprite_grab(0, 164, 52, ANCHO_BLOQUE * 2);
-   sprites.jugador_quieto[1] = sprite_grab(56, 164, 52, ANCHO_BLOQUE * 2);
+   sprites.jugador_quieto[0] = sprite_grab(0, 140, 52, ANCHO_BLOQUE * 2);
+   sprites.jugador_quieto[1] = sprite_grab(56, 140, 52, ANCHO_BLOQUE * 2);
 
-   sprites.jugador_corriendo[0] = sprite_grab(0, 252, 72, 88);
-   sprites.jugador_corriendo[1] = sprite_grab(76, 252, 60, 88);
-   sprites.jugador_corriendo[2] = sprite_grab(140, 252, 64, 88);
-   sprites.jugador_corriendo[3] = sprite_grab(208, 252, 56, 88);
-   sprites.jugador_corriendo[4] = sprite_grab(268, 252, 68, 88);
+   sprites.jugador_corriendo[0] = sprite_grab(0, 228, 72, 88);
+   sprites.jugador_corriendo[1] = sprite_grab(76, 228, 60, 88);
+   sprites.jugador_corriendo[2] = sprite_grab(140, 228, 64, 88);
+   sprites.jugador_corriendo[3] = sprite_grab(208, 228, 56, 88);
+   sprites.jugador_corriendo[4] = sprite_grab(268, 228, 68, 88);
 
    sprites.jugador_salto = sprite_grab(LARGO * 4, ANCHO, LARGO_BLOQUE, ANCHO_BLOQUE);
    sprites.jugador_parry = sprite_grab(LARGO * 5, ANCHO, LARGO_BLOQUE, ANCHO_BLOQUE);
@@ -1430,6 +1785,7 @@ void sprites_deinit()
    al_destroy_bitmap(sprites.enredadera);
    al_destroy_bitmap(sprites.flor);
    al_destroy_bitmap(sprites.puerta);
+   al_destroy_bitmap(sprites.portal_local);
 
    al_destroy_bitmap(sprites.enemigoA[0]);
    al_destroy_bitmap(sprites.enemigoA[1]);
