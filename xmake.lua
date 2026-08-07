@@ -6,7 +6,7 @@ target("game")
    set_kind("binary")
    add_files("src/*.c")
 	add_includedirs("include")
-   add_syslinks("allegro", "allegro_font", "allegro_primitives", "allegro_audio", "allegro_image")
+   add_syslinks("allegro", "allegro_font", "allegro_primitives", "allegro_audio", "allegro_image", "allegro_dialog", "allegro_ttf")
     
 	if is_plat("linux") then
       add_cflags("-Wall", "-Wextra", {tools = "clang"})
