@@ -78,6 +78,9 @@
 #define MONEDAS_JUEGO 15
 #define MAX_MONEDAS 5
 
+#define VIDA_DIANA 25
+#define MAX_DIANAS 10
+
 #define REGRESO_DE_PORTAL -200
 
 #define MAX_SOMBREROS 10
@@ -184,8 +187,8 @@
 #define ARMAS_TIENDA 2
 #define PRECIO_ARMA 4
 
-#define VARIABLES_CARGARMAPA char mapa[ANCHO_MAPA][LARGO_MAPA], entidad monedasMapa[MAX_MONEDAS], int *cantidadMonedas, portal *portalSalida, sombreros sombrerosHorizontales[MAX_SOMBREROS], sombreros sombrerosVerticales[MAX_SOMBREROS], int *cantidadSombrerosHorizontalesEntrada, int *cantidadSombrerosHorizontalesSalida, int *cantidadSombrerosVerticalesEntrada, int *cantidadSombrerosVerticalesSalida, int nivel, int zona, bool *GRAVEDAD, entidad *jugador, entidad enemigosA[MAX_ENEMIGOS], int *cantidadEnemigosA, entidad enemigosC[MAX_ENEMIGOS], int *cantidadEnemigosC, entidad enemigosE[MAX_ENEMIGOS], int *cantidadEnemigosE
-#define CARGADO_DE_MAPA mapa, monedasMapa, &cantidadMonedas, &portalSalida, sombrerosHorizontales, sombrerosVerticales, &cantidadSombrerosHorizontalesEntrada, &cantidadSombrerosHorizontalesSalida, &cantidadSombrerosVerticalesEntrada, &cantidadSombrerosVerticalesSalida, nivel, zona, &GRAVEDAD, &jugador, enemigosA, &cantidadEnemigosA, enemigosC, &cantidadEnemigosC, enemigosE, &cantidadEnemigosE
+#define VARIABLES_CARGARMAPA char mapa[ANCHO_MAPA][LARGO_MAPA], entidad monedasMapa[MAX_MONEDAS], int *cantidadMonedas, entidad dianas[MAX_DIANAS], int *cantidadDianas, portal *portalSalida, sombreros sombrerosHorizontales[MAX_SOMBREROS], sombreros sombrerosVerticales[MAX_SOMBREROS], int *cantidadSombrerosHorizontalesEntrada, int *cantidadSombrerosHorizontalesSalida, int *cantidadSombrerosVerticalesEntrada, int *cantidadSombrerosVerticalesSalida, int nivel, int zona, bool *GRAVEDAD, entidad *jugador, entidad enemigosA[MAX_ENEMIGOS], int *cantidadEnemigosA, entidad enemigosC[MAX_ENEMIGOS], int *cantidadEnemigosC, entidad enemigosE[MAX_ENEMIGOS], int *cantidadEnemigosE
+#define CARGADO_DE_MAPA mapa, monedasMapa, &cantidadMonedas, dianas, &cantidadDianas, &portalSalida, sombrerosHorizontales, sombrerosVerticales, &cantidadSombrerosHorizontalesEntrada, &cantidadSombrerosHorizontalesSalida, &cantidadSombrerosVerticalesEntrada, &cantidadSombrerosVerticalesSalida, nivel, zona, &GRAVEDAD, &jugador, enemigosA, &cantidadEnemigosA, enemigosC, &cantidadEnemigosC, enemigosE, &cantidadEnemigosE
 
 typedef struct
 {
@@ -289,6 +292,9 @@ typedef struct
    ALLEGRO_BITMAP* alfombra;
    ALLEGRO_BITMAP* pinchos;
    ALLEGRO_BITMAP* tope_pinchos;
+
+   ALLEGRO_BITMAP* bloque_tutorial;
+   ALLEGRO_BITMAP* semiplataforma_tutorial;
 
    ALLEGRO_BITMAP* moneda[FRAMES_MONEDA];
 
@@ -631,7 +637,7 @@ int main()
    jugador.direccion.Derecha = false;
    jugador.direccion.Espacio = false;
    jugador.direccion.X = false;
-   jugador.monedas = 0;
+   jugador.monedas = 3;
    jugador.armaEquipada = 0;
    jugador.frameQuieto = 0;
    jugador.frameLock = 0;
@@ -650,6 +656,9 @@ int main()
 
    entidad monedasMapa[MAX_MONEDAS];
    int cantidadMonedas = 0;
+
+   entidad dianas[MAX_DIANAS];
+   int cantidadDianas = 0;
    //bool monedasActivas[MONEDAS_JUEGO];
 
    int iFrames = 0;
@@ -1095,7 +1104,7 @@ int main()
 
       if(redraw && al_is_event_queue_empty(queue))
       {
-         al_clear_to_color(al_map_rgb(122, 122, 122));
+         al_clear_to_color(al_map_rgb(255, 255, 255));
 
          if(enMenu)
          {
@@ -1175,7 +1184,11 @@ int main()
             {
                puedeHacerParry = true;
             }
-            if(nivel == 1 || nivel == 2 || nivel == 3)
+            if(nivel == -1)
+            {
+               zona = -1;
+            }
+            else if(nivel == 1 || nivel == 2 || nivel == 3)
             {
                zona = 1;
             }
@@ -1530,6 +1543,36 @@ int main()
                            puntajeZona += PUNTAJE_ENEMIGO_C;
                         }
                      }
+                  }
+               }
+               for(cont = 0; cont < cantidadDianas; cont++)
+               {
+                  if(jugador.balas[i].activa == true && dianas[cont].activo == true)
+                  {
+                     if(generalCollide(jugador.balas[i].posX, jugador.balas[i].posY, LARGO_BALA, ANCHO_BALA, dianas[cont].posX, dianas[cont].posY, 40, 200) == true)
+                     {
+                        dianas[cont].vida -= DANHO_BALA;
+                        jugador.balas[i].activa = false; // Despawn de bala.
+                        jugador.balas[i].direccion.Arriba = false;
+                        jugador.balas[i].direccion.Abajo = false;
+                        jugador.balas[i].direccion.Izquierda = false;
+                        jugador.balas[i].direccion.Derecha = false;
+                        if(dianas[cont].vida <= 0)
+                        {
+                           dianas[cont].activo = false;
+                        }
+                     }
+                  }
+               }
+            }
+
+            for(cont = 0; cont < cantidadDianas; cont++)
+            {
+               if(dianas[cont].activo == true)
+               {
+                  if(generalCollide(jugador.posX, jugador.posY, LARGO, ANCHO, dianas[cont].posX, dianas[cont].posY, 40, 200) == true)
+                  {
+                     jugador.posX = dianas[cont].posX - LARGO;
                   }
                }
             }
@@ -2060,6 +2103,7 @@ int main()
                            al_draw_textf(font, al_map_rgb(255, 255, 255), jugador.posX, jugador.posY + 50, 0, "Transicionando...");
                            nivel++;
                            dashFrames = 0;
+                           jugador.vida = VIDA_INICIAL;
                            for(contEnemigos = 0; contEnemigos < cantidadEnemigosC; contEnemigos++) // Destruye los timers de los enemigos C:
                            {
                               al_destroy_timer(enemigosC[contEnemigos].tempEnemigosC);
@@ -2362,6 +2406,9 @@ int main()
                               case 2:
                               al_draw_bitmap(sprites.madera, drawX, drawY, 0);
                               break;
+                              default:
+                              al_draw_bitmap(sprites.bloque_tutorial, drawX, drawY, 0);
+                              break;
                            }
                         }
                      }
@@ -2387,6 +2434,9 @@ int main()
                               case 2:
                               al_draw_bitmap(sprites.madera, drawX, drawY, 0);
                               break;
+                              default:
+                              al_draw_bitmap(sprites.bloque_tutorial, drawX, drawY, 0);
+                              break;
                            }
                         }
                         if(i - 1 >= 0)
@@ -2401,6 +2451,9 @@ int main()
                                  case 2:
                                  al_draw_bitmap(sprites.alfombra, drawX, drawY, 0);
                                  break;
+                                 default:
+                                 al_draw_bitmap(sprites.bloque_tutorial, drawX, drawY, 0);
+                                 break;
                               }
                            }
                            else // Dibuja tierra si la casilla superior es pasto.
@@ -2412,6 +2465,9 @@ int main()
                                  break;
                                  case 2:
                                  al_draw_bitmap(sprites.madera, drawX, drawY, 0);
+                                 break;
+                                 default:
+                                 al_draw_bitmap(sprites.bloque_tutorial, drawX, drawY, 0);
                                  break;
                               }
                            }
@@ -2433,6 +2489,9 @@ int main()
                               case 2:
                               al_draw_bitmap(sprites.madera, drawX, drawY, 0);
                               break;
+                              default:
+                              al_draw_bitmap(sprites.bloque_tutorial, drawX, drawY, 0);
+                              break;
                            }
                         }
                      }
@@ -2451,6 +2510,9 @@ int main()
                               break;
                               case 2:
                               al_draw_tinted_bitmap(sprites.madera, al_map_rgba_f(0.5, 0.5, 0.5, 1), drawX, (i - cont)*ANCHO - camaraY, 0);
+                              break;
+                              default:
+                              al_draw_tinted_bitmap(sprites.bloque_tutorial, al_map_rgba_f(0.5, 0.5, 0.5, 1), drawX, (i - cont)*ANCHO - camaraY, 0);
                               break;
                            }
                         }
@@ -2477,8 +2539,16 @@ int main()
                      }
                      if(mapa[i][j] == 'p') // Parry enemigo
                      {
-                        //al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(1, 0.5, 0.6, 0.2));
-                        al_draw_rotated_bitmap(sprites.flor, CENTRO_FLOR_X, CENTRO_FLOR_Y, drawX - OFFSET_FLOR_X, drawY - OFFSET_FLOR_Y, ANGULO_BASE_FLOR + anguloFlores, 0);
+                        switch(zona) 
+                        {
+                           case 1:
+                           //al_draw_filled_rectangle(drawX, drawY, drawX + LARGO, drawY + ANCHO, al_map_rgba_f(1, 0.5, 0.6, 0.2));
+                           al_draw_rotated_bitmap(sprites.flor, CENTRO_FLOR_X, CENTRO_FLOR_Y, drawX - OFFSET_FLOR_X, drawY - OFFSET_FLOR_Y, ANGULO_BASE_FLOR + anguloFlores, 0);
+                           break;
+                           default:
+                           al_draw_bitmap(sprites.enemigoE, drawX, drawY, 0);
+                           break;
+                        }
                      }
                      if(mapa[i][j] == 'H') // Corazon
                      {
@@ -2548,20 +2618,41 @@ int main()
                   }
                }
             }
-            switch(jugador.armaEquipada)
+            if(nivel == 0)
             {
-               case 0:
-               al_draw_bitmap(sprites.logo_peashooter, 0, 660, 0);
-               al_draw_textf(font, al_map_rgb(0, 0, 0), 0, 710, 0, "Peashooter");
-               break;
-               case 1:
-               al_draw_bitmap(sprites.logo_chaser, 0, 660, 0);
-               al_draw_textf(font, al_map_rgb(0, 0, 0), 0, 710, 0, "Chaser");
-               break;
-               case 2:
-               al_draw_bitmap(sprites.logo_roundabout, 0, 660, 0);
-               al_draw_textf(font, al_map_rgb(0, 0, 0), 0, 710, 0, "Roundabout");
-               break;
+               switch(jugador.armaEquipada)
+               {
+                  case 0:
+                  al_draw_bitmap(sprites.logo_peashooter, 0, 660, 0);
+                  al_draw_textf(font, al_map_rgb(0, 0, 0), 0, 710, 0, "Peashooter");
+                  break;
+                  case 1:
+                  al_draw_bitmap(sprites.logo_chaser, 0, 660, 0);
+                  al_draw_textf(font, al_map_rgb(0, 0, 0), 0, 710, 0, "Chaser");
+                  break;
+                  case 2:
+                  al_draw_bitmap(sprites.logo_roundabout, 0, 660, 0);
+                  al_draw_textf(font, al_map_rgb(0, 0, 0), 0, 710, 0, "Roundabout");
+                  break;
+               }
+            }
+            else
+            {
+               switch(jugador.armaEquipada)
+               {
+                  case 0:
+                  al_draw_bitmap(sprites.logo_peashooter, 0, 558, 0);
+                  al_draw_textf(font, al_map_rgb(0, 0, 0), 0, 618, 0, "Peashooter");
+                  break;
+                  case 1:
+                  al_draw_bitmap(sprites.logo_chaser, 0, 558, 0);
+                  al_draw_textf(font, al_map_rgb(0, 0, 0), 0, 618, 0, "Chaser");
+                  break;
+                  case 2:
+                  al_draw_bitmap(sprites.logo_roundabout, 0, 558, 0);
+                  al_draw_textf(font, al_map_rgb(0, 0, 0), 0, 618, 0, "Roundabout");
+                  break;
+               }
             }
 
             if((int)(valorTimer) % SPIN_RATE_FLOR == 0) // Animaciones de elementos estaticos.
@@ -3190,6 +3281,7 @@ int main()
             {
                al_draw_bitmap(sprites.moneda[3], 0, 0, 0);
                al_draw_textf(font48, al_map_rgb(1, 1, 1), 50, 0, 0, "x %d", jugador.monedas);
+               al_draw_textf(font48, al_map_rgb(0, 0, 0), 1232, 652, ALLEGRO_ALIGN_RIGHT, "Z: Entrar a nivel");
             }
             dibujar_menu(&menutienda, font, jugador, armas); // se dibuja encima de todo, al final
 
@@ -3585,6 +3677,11 @@ void cargarMapa(VARIABLES_CARGARMAPA)
 
    switch(nivel)
    {
+      case -1:
+      contenidoMapa = fopen("mapa-1.txt", "r");
+      must_init(contenidoMapa, "mapa-1");
+      break;
+
       case 0:
       contenidoMapa = fopen("mapa0.txt", "r");
       must_init(contenidoMapa, "mapa0");
@@ -3800,6 +3897,14 @@ void cargarMapa(VARIABLES_CARGARMAPA)
                   (*cantidadMonedas)++;
                }
                contMonedasMapa++;
+            }
+            if(valorRecibido == '|')
+            {
+               dianas[*cantidadDianas].activo = true;
+               dianas[*cantidadDianas].posX = puntoX;
+               dianas[*cantidadDianas].posY = puntoY;
+               dianas[*cantidadDianas].vida = VIDA_DIANA;
+               (*cantidadDianas)++;
             }
             if(valorRecibido == '^')
             {
@@ -4246,6 +4351,9 @@ void sprites_init()
    sprites.alfombra = sprite_grab(0, ANCHO, LARGO_BLOQUE, ANCHO_BLOQUE);
    sprites.pinchos = sprite_grab(LARGO * 12, 0, LARGO_BLOQUE, ANCHO_BLOQUE);
    sprites.tope_pinchos = sprite_grab(LARGO * 13, 0, LARGO_BLOQUE, ANCHO_BLOQUE);
+   
+   sprites.bloque_tutorial = sprite_grab(LARGO * 6, ANCHO, LARGO_BLOQUE, ANCHO_BLOQUE);
+   sprites.semiplataforma_tutorial = sprite_grab(40, 60, 40, 20);
 
    sprites.moneda[0] = sprite_grab(308, 424, 48, 52);
    sprites.moneda[1] = sprite_grab(360, 424, 48, 52);
@@ -4384,6 +4492,9 @@ void sprites_deinit()
    al_destroy_bitmap(sprites.alfombra);
    al_destroy_bitmap(sprites.pinchos);
    al_destroy_bitmap(sprites.tope_pinchos);
+
+   al_destroy_bitmap(sprites.bloque_tutorial);
+   al_destroy_bitmap(sprites.semiplataforma_tutorial);
 
    al_destroy_bitmap(sprites.moneda[0]);
    al_destroy_bitmap(sprites.moneda[1]);
